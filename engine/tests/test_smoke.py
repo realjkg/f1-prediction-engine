@@ -1,8 +1,8 @@
-"""Scaffold smoke tests — seams import, the app factory works, stubs refuse.
+"""Scaffold smoke tests — seams import, the app factory works, seams refuse.
 
 Each seam's real behavior is tested by its owning task; this file pins the
-skeleton: the package imports, the FastAPI factory serves health, and every
-stub raises NotImplementedError rather than guessing.
+skeleton: the package imports, the FastAPI factory serves health, and
+degenerate inputs are refused with typed errors rather than guessed at.
 """
 
 from pathlib import Path
@@ -11,8 +11,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from f1engine.app import APP_TITLE, create_app
-from f1engine.ensemble import arbitrate
-from f1engine.evidence import append_record, verify_chain
+from f1engine.ensemble import EnsembleInvalidInput, arbitrate
+from f1engine.evidence import EvidenceRecordInvalid, append_record
 from f1engine.models import MODEL_IDS
 from f1engine.observability import Signal
 
@@ -38,10 +38,11 @@ def test_create_app_serves_health() -> None:
     assert APP_TITLE == "F1 Prediction Engine"
 
 
-def test_stubs_raise_not_implemented() -> None:
-    with pytest.raises(NotImplementedError):
+def test_arbitrate_refuses_empty_input() -> None:
+    with pytest.raises(EnsembleInvalidInput):
         arbitrate([], weights={})
-    with pytest.raises(NotImplementedError):
-        append_record(Path("ledger.jsonl"), record={})
-    with pytest.raises(NotImplementedError):
-        verify_chain(Path("ledger.jsonl"))
+
+
+def test_append_record_refuses_schema_failures(tmp_path: Path) -> None:
+    with pytest.raises(EvidenceRecordInvalid):
+        append_record(tmp_path / "ledger.jsonl", record={})
