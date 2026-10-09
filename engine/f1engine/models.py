@@ -41,7 +41,7 @@ from f1engine.features import (
     RoundKey,
 )
 from f1engine.ingestion import PinnedDataset
-from f1engine.wire import WireModel
+from f1engine.wire import WireModel, winner_sums_to_one
 
 MODEL_IDS: tuple[str, ...] = ("m1-gbm", "m2-logit", "m3-form")
 MODEL_SEED = 2026
@@ -122,10 +122,7 @@ class ModelPrediction(WireModel):
     @field_validator("winner")
     @classmethod
     def _winner_sums_to_one(cls, value: dict[str, float]) -> dict[str, float]:
-        total = sum(value.values())
-        if not math.isclose(total, 1.0, abs_tol=1e-6):
-            raise ValueError(f"winner distribution must sum to 1, got {total}")
-        return value
+        return winner_sums_to_one(value)
 
 
 @runtime_checkable

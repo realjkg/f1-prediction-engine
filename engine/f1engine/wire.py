@@ -8,6 +8,8 @@ consistent so serialized records never drift per module.
 
 from __future__ import annotations
 
+import math
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -15,6 +17,16 @@ def to_camel(name: str) -> str:
     """snake_case field name -> camelCase alias."""
     head, *rest = name.split("_")
     return head + "".join(part.title() for part in rest)
+
+
+def winner_sums_to_one(value: dict[str, float]) -> dict[str, float]:
+    """Shared field validator: a winner distribution must sum to 1."""
+    if not value:
+        raise ValueError("distribution must cover at least one driver")
+    total = sum(value.values())
+    if not math.isclose(total, 1.0, abs_tol=1e-6):
+        raise ValueError(f"winner distribution must sum to 1, got {total}")
+    return value
 
 
 class WireModel(BaseModel):
