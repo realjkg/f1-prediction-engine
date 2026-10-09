@@ -9,8 +9,10 @@ requires-python = ">=3.12"
 # within a minor, and the determinism tests enforce the contract per version.
 dependencies = [
     "fastapi>=0.115,<1",
+    "prometheus-client>=0.21,<1",
     "pydantic>=2.9,<3",
     "pyarrow>=18,<25",
+    "pyyaml>=6,<7",
     "scikit-learn>=1.7,<1.8",
     "uvicorn>=0.32,<1",
 ]
