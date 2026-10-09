@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+web/dist/
+*.local
+
+# Env & runs
+.env
+.env.*.local
+.runs/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
