@@ -18,8 +18,11 @@ from types import ModuleType
 
 import pytest
 
+from f1engine.ingestion import PinnedDataset, load_snapshot
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "refresh-data.py"
+REPO_SNAPSHOT = REPO_ROOT / "data" / "snapshot"
 
 
 def _load_refresh_module() -> ModuleType:
@@ -45,8 +48,16 @@ class FakeJolpica:
     request_urls: list[str]
 
 
-def make_fake_jolpica(refresh_module: ModuleType) -> FakeJolpica:
-    """Build a fake fetch function shaped like the real Jolpica API."""
+def make_fake_jolpica(refresh_module: ModuleType, rounds: int = 2) -> FakeJolpica:
+    """Build a fake fetch function shaped like the real Jolpica API.
+
+    rounds=2 (default) is the ingestion/features fixture: two identical
+    rounds, byte-for-byte the historical shape. rounds=4 adds two more
+    decided rounds — round 3 hands the win to test-mate and retires
+    test-third with a DNF, so a window covering rounds 1-3 carries both
+    winner classes and a podium-negative label — and a fourth round to
+    predict, for the model/ensemble/ledger tests.
+    """
     driver = {
         "driverId": "test-driver",
         "givenName": "Test",
@@ -99,35 +110,71 @@ def make_fake_jolpica(refresh_module: ModuleType) -> FakeJolpica:
         },
     ]
     people = [driver, teammate, third]
+    people_by_id = {
+        "test-driver": driver,
+        "test-mate": teammate,
+        "test-third": third,
+    }
+
+    # Finishing order per round (qualifying mirrors it). Defaults keep the
+    # historical two-round shape byte-for-byte.
+    finish_orders: dict[int, list[str]] = {
+        1: ["test-driver", "test-mate", "test-third"],
+        2: ["test-driver", "test-mate", "test-third"],
+        3: ["test-mate", "test-driver", "test-third"],
+        4: ["test-driver", "test-mate", "test-third"],
+        5: ["test-driver", "test-mate", "test-third"],
+    }
+
+    def results_for(round_number: int) -> list[dict]:
+        dnf = "test-third" if round_number == 3 else None
+        place = 0
+        rows = []
+        for driver_id in finish_orders[round_number]:
+            if driver_id == dnf:
+                rows.append(
+                    {
+                        "positionText": "DNF",
+                        "points": "0",
+                        "Driver": people_by_id[driver_id],
+                        "Constructor": constructor,
+                        "grid": "3",
+                        "laps": "5",
+                        "status": "Engine",
+                    }
+                )
+                continue
+            place += 1
+            rows.append(
+                {
+                    "position": str(place),
+                    "positionText": str(place),
+                    "points": ["25", "18", "15"][place - 1],
+                    "Driver": people_by_id[driver_id],
+                    "Constructor": constructor,
+                    "grid": str(place),
+                    "laps": "57",
+                    "status": "Finished",
+                    "Time": {"millis": str(5_000_000 + place * 1000)},
+                }
+            )
+        return rows
+
+    def qualifying_for(round_number: int) -> list[dict]:
+        return [
+            {
+                "position": str(index + 1),
+                "Driver": people_by_id[driver_id],
+                "Constructor": constructor,
+                "Q1": f"1:29.{100 + index}",
+                "Q2": f"1:28.{200 + index}",
+                "Q3": f"1:27.{300 + index}",
+            }
+            for index, driver_id in enumerate(finish_orders[round_number])
+        ]
 
     def race_with(key: str, entries: list[dict]) -> dict:
         return {"season": "2021", "round": "1", key: entries}
-
-    results = [
-        {
-            "position": str(index + 1),
-            "positionText": str(index + 1),
-            "points": ["25", "18", "15"][index],
-            "Driver": person,
-            "Constructor": constructor,
-            "grid": str(index + 1),
-            "laps": "57",
-            "status": "Finished",
-            "Time": {"millis": str(5_000_000 + index * 1000)},
-        }
-        for index, person in enumerate(people)
-    ]
-    qualifying = [
-        {
-            "position": str(index + 1),
-            "Driver": person,
-            "Constructor": constructor,
-            "Q1": f"1:29.{100 + index}",
-            "Q2": f"1:28.{200 + index}",
-            "Q3": f"1:27.{300 + index}",
-        }
-        for index, person in enumerate(people)
-    ]
     sprint = [
         {
             "position": str(index + 1),
@@ -140,27 +187,61 @@ def make_fake_jolpica(refresh_module: ModuleType) -> FakeJolpica:
         for index, person in enumerate(people)
     ]
 
+    later_races = [
+        {
+            "season": "2021",
+            "round": "3",
+            "raceName": "Third Grand Prix",
+            "date": "2021-06-06",
+            "Circuit": {
+                "circuitId": "third_circuit",
+                "circuitName": "Third Circuit",
+                "Location": {"country": "Testland", "locality": "Thirdville"},
+            },
+        },
+        {
+            "season": "2021",
+            "round": "4",
+            "raceName": "Fourth Grand Prix",
+            "date": "2021-06-27",
+            "Circuit": {
+                "circuitId": "fourth_circuit",
+                "circuitName": "Fourth Circuit",
+                "Location": {"country": "Testland", "locality": "Fourthville"},
+            },
+        },
+        {
+            "season": "2021",
+            "round": "5",
+            "raceName": "Fifth Grand Prix",
+            "date": "2021-07-04",
+            "Circuit": {
+                "circuitId": "fifth_circuit",
+                "circuitName": "Fifth Circuit",
+                "Location": {"country": "Testland", "locality": "Fifthville"},
+            },
+        },
+    ]
+    all_races = races + later_races if rounds > 2 else races
+
     def mrdata(total: int, races_block: list[dict]) -> dict:
         return {"MRData": {"total": str(total), "RaceTable": {"Races": races_block}}}
 
     responses: dict[str, dict] = {
-        "2021.json?limit=100&offset=0": mrdata(2, races),
-        "2021/1/results.json?limit=100&offset=0": mrdata(
-            3, [race_with("Results", results)]
-        ),
-        "2021/1/qualifying.json?limit=100&offset=0": mrdata(
-            3, [race_with("QualifyingResults", qualifying)]
-        ),
+        "2021.json?limit=100&offset=0": mrdata(len(all_races), all_races),
         "2021/1/sprint.json?limit=100&offset=0": mrdata(
             3, [race_with("SprintResults", sprint)]
         ),
-        "2021/2/results.json?limit=100&offset=0": mrdata(
-            3, [race_with("Results", results)]
-        ),
-        "2021/2/qualifying.json?limit=100&offset=0": mrdata(
-            3, [race_with("QualifyingResults", qualifying)]
-        ),
     }
+    for round_number in range(1, rounds + 1):
+        responses[f"2021/{round_number}/results.json?limit=100&offset=0"] = mrdata(
+            3, [race_with("Results", results_for(round_number))]
+        )
+        responses[
+            f"2021/{round_number}/qualifying.json?limit=100&offset=0"
+        ] = mrdata(
+            3, [race_with("QualifyingResults", qualifying_for(round_number))]
+        )
 
     requested: list[str] = []
 
@@ -184,8 +265,10 @@ def mini_snapshot_factory(
 ) -> Callable[..., Path]:
     """Build a valid mini snapshot in a dir; returns the snapshot path."""
 
-    def build(data_dir: Path, cache_dir: Path, **overrides: object) -> Path:
-        fake = make_fake_jolpica(refresh)
+    def build(
+        data_dir: Path, cache_dir: Path, rounds: int = 2, **overrides: object
+    ) -> Path:
+        fake = make_fake_jolpica(refresh, rounds=rounds)
         run_kwargs: dict[str, object] = {
             "seasons": [2021],
             "data_dir": data_dir,
@@ -210,3 +293,25 @@ def mini_snapshot(
 ) -> Path:
     """A ready-made valid mini snapshot in this test's tmp dir."""
     return mini_snapshot_factory(tmp_path / "snapshot", tmp_path / "cache")
+
+
+@pytest.fixture()
+def predictable_snapshot(
+    mini_snapshot_factory: Callable[..., Path], tmp_path: Path
+) -> Path:
+    """A mini snapshot with four decided rounds and a fifth to predict.
+
+    Rounds 1-4 are the training window (round 3 carries a DNF, giving the
+    podium labels a second class); round 5 is the prediction target. The
+    ledger tests chain two real records: rounds 4 and 5, each trained on a
+    window that includes the round-3 DNF.
+    """
+    return mini_snapshot_factory(
+        tmp_path / "predictable", tmp_path / "cache", rounds=5
+    )
+
+
+@pytest.fixture(scope="session")
+def real_snapshot() -> PinnedDataset:
+    """The committed 2020-2024 snapshot, hash-verified once per session."""
+    return load_snapshot(REPO_SNAPSHOT)
