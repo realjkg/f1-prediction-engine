@@ -61,6 +61,13 @@ def make_fake_jolpica(refresh_module: ModuleType) -> FakeJolpica:
         "code": "MAT",
         "nationality": "Testland",
     }
+    third = {
+        "driverId": "test-third",
+        "givenName": "Test",
+        "familyName": "Third",
+        "code": "THR",
+        "nationality": "Testland",
+    }
     constructor = {
         "constructorId": "test-team",
         "name": "Test Team",
@@ -91,7 +98,7 @@ def make_fake_jolpica(refresh_module: ModuleType) -> FakeJolpica:
             },
         },
     ]
-    people = [driver, teammate, driver]
+    people = [driver, teammate, third]
 
     def race_with(key: str, entries: list[dict]) -> dict:
         return {"season": "2021", "round": "1", key: entries}

@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 from f1engine.app import APP_TITLE, create_app
 from f1engine.ensemble import arbitrate
 from f1engine.evidence import append_record, verify_chain
-from f1engine.features import build_asof_features
 from f1engine.models import MODEL_IDS
 from f1engine.observability import Signal
 
@@ -40,8 +39,6 @@ def test_create_app_serves_health() -> None:
 
 
 def test_stubs_raise_not_implemented() -> None:
-    with pytest.raises(NotImplementedError):
-        build_asof_features({}, through_round=1)
     with pytest.raises(NotImplementedError):
         arbitrate([], weights={})
     with pytest.raises(NotImplementedError):
