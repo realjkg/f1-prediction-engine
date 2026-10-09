@@ -19,12 +19,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
-from pydantic import ValidationError
+from pydantic import Field, ValidationError
 
 from f1engine.dataset import sha256_hex
 from f1engine.ensemble import EnsembleVerdict
 from f1engine.ingestion import PinnedDataset, RaceRow
-from f1engine.models import ModelId, ModelPrediction
+from f1engine.models import MODEL_IDS, ModelId, ModelPrediction
 from f1engine.wire import WireModel
 
 LEDGER_SCHEMA_VERSION = 1
@@ -98,6 +98,62 @@ class PredictionRecord(WireModel):
     record_sha256: str = ""  # set by append_record; excluded from the chain hash
 
 
+ENSEMBLE_KEY = "ensemble"
+"""Key under which the ensemble's aggregate metrics are recorded in the ledger."""
+
+
+class BacktestMetrics(WireModel):
+    """Aggregate accuracy of one model (or the ensemble) over a backtest."""
+
+    rounds: int = Field(ge=0)
+    winner_hit_rate: float = Field(ge=0.0, le=1.0)
+    podium3_hit_rate: float = Field(ge=0.0, le=1.0)
+    # Multi-class Brier against a one-hot winner is bounded by 2: all mass on
+    # one wrong driver scores (1-0)^2 + (1-1)^2 across the two classes.
+    mean_brier: float = Field(ge=0.0, le=2.0)
+
+
+class SkippedRound(WireModel):
+    """A target round the backtest could not score, with its typed reason."""
+
+    season: int
+    round: int
+    code: str
+    message: str
+
+
+class BacktestRecord(WireModel):
+    """The ledger's backtest record — measured accuracy as evidence.
+
+    Like every ledger record it is advisory-only and self-describing: the
+    metric definitions travel in the record, and the dataset identity ties
+    the measured numbers to the pinned snapshot they were measured against.
+    metrics keys are closed at build time to MODEL_IDS + ENSEMBLE_KEY.
+    """
+
+    schema_version: Literal[1] = LEDGER_SCHEMA_VERSION
+    record_type: Literal["backtest"]
+    backtest_id: str
+    season: int = Field(ge=1950, le=2100)
+    first_round: int = Field(ge=1, le=100)
+    last_round: int = Field(ge=1, le=100)
+    rounds_scored: int = Field(ge=0)
+    generated_at: str
+    dataset: DatasetIdentity
+    evidence_basis: str
+    metric_definitions: dict[str, str]
+    metrics: dict[str, BacktestMetrics]
+    skipped_rounds: tuple[SkippedRound, ...] = ()
+    advisory_only: Literal[True]
+    data_limitations: list[str]
+    prev_record_sha256: str | None = None
+    record_sha256: str = ""  # set by append_record; excluded from the chain hash
+
+
+LedgerRecord = PredictionRecord | BacktestRecord
+"""The closed set of ledger record types — extending it is a spec change."""
+
+
 def build_prediction_record(
     predictions: Sequence[ModelPrediction],
     verdict: EnsembleVerdict,
@@ -123,6 +179,54 @@ def build_prediction_record(
         evidence_basis=evidence_basis,
         models={prediction.model_id: prediction for prediction in predictions},
         ensemble=verdict,
+        advisory_only=True,
+        data_limitations=list(dataset.limitations),
+    )
+
+
+def build_backtest_record(
+    dataset: PinnedDataset,
+    *,
+    season: int,
+    first_round: int,
+    last_round: int,
+    metrics: dict[str, BacktestMetrics],
+    metric_definitions: dict[str, str],
+    skipped_rounds: Sequence[SkippedRound],
+    evidence_basis: str,
+) -> BacktestRecord:
+    """Assemble the ledger's backtest record from aggregate metrics.
+
+    Refuses an empty metric set, an unknown metrics key, or inconsistent
+    per-key round counts — the record must describe one coherent window.
+    """
+    if not metrics:
+        raise EvidenceRecordInvalid("backtest record needs at least one metrics entry")
+    allowed_keys = set(MODEL_IDS) | {ENSEMBLE_KEY}
+    unknown = set(metrics) - allowed_keys
+    if unknown:
+        raise EvidenceRecordInvalid(
+            f"backtest metrics carry unknown key(s) {sorted(unknown)} — "
+            f"allowed: {sorted(allowed_keys)}"
+        )
+    round_counts = {entry.rounds for entry in metrics.values()}
+    if len(round_counts) > 1:
+        raise EvidenceRecordInvalid(
+            f"backtest metrics disagree on rounds scored: {sorted(round_counts)}"
+        )
+    return BacktestRecord(
+        record_type="backtest",
+        backtest_id=f"backtest-{season}",
+        season=season,
+        first_round=first_round,
+        last_round=last_round,
+        rounds_scored=round_counts.pop() if round_counts else 0,
+        generated_at=dataset.provenance.generatedAt,
+        dataset=DatasetIdentity(id=dataset.dataset_id, sha256=dataset.dataset_sha256),
+        evidence_basis=evidence_basis,
+        metric_definitions=metric_definitions,
+        metrics=metrics,
+        skipped_rounds=tuple(skipped_rounds),
         advisory_only=True,
         data_limitations=list(dataset.limitations),
     )
@@ -156,17 +260,19 @@ def _validate_consistency(
 
 
 def append_record(
-    ledger_path: Path, record: PredictionRecord | dict[str, object]
+    ledger_path: Path, record: LedgerRecord | dict[str, object]
 ) -> str:
     """Append one hash-chained record; returns the record's sha256.
 
-    Dicts are validated into the closed schema first, so a malformed record
-    is refused before anything touches the file. The record is chained to the
-    current last line (genesis records name no predecessor) and the file is
-    opened in append mode — existing lines are never rewritten.
+    Dicts are validated into one of the closed record schemas first, so a
+    malformed record is refused before anything touches the file. The record
+    is chained to the current last line (genesis records name no predecessor)
+    and the file is opened in append mode — existing lines are never rewritten.
     """
     validated = (
-        record if isinstance(record, PredictionRecord) else _validated_record(record)
+        record
+        if isinstance(record, (PredictionRecord, BacktestRecord))
+        else _validated_record(record)
     )
     chained = validated.model_copy(
         update={"prev_record_sha256": _last_record_hash(ledger_path)}
@@ -217,16 +323,21 @@ def chain_is_valid(ledger_path: Path) -> bool:
     return True
 
 
-def _validated_record(payload: dict[str, object]) -> PredictionRecord:
+def _validated_record(payload: dict[str, object]) -> LedgerRecord:
     try:
         return PredictionRecord.model_validate(payload)
+    except ValidationError:
+        pass
+    try:
+        return BacktestRecord.model_validate(payload)
     except ValidationError as error:
         raise EvidenceRecordInvalid(
-            f"record failed the closed ledger schema: {error}"
+            "record matched no closed ledger schema (prediction, backtest): "
+            f"{error}"
         ) from error
 
 
-def _parsed_record(index: int, line: str) -> PredictionRecord:
+def _parsed_record(index: int, line: str) -> LedgerRecord:
     try:
         payload = json.loads(line)
     except json.JSONDecodeError as error:
@@ -257,7 +368,7 @@ def _last_record_hash(ledger_path: Path) -> str | None:
     return last.record_sha256
 
 
-def _record_digest(record: PredictionRecord) -> str:
+def _record_digest(record: LedgerRecord) -> str:
     """sha256 of the record's canonical JSON, excluding its own hash field."""
     payload = record.model_dump(by_alias=True)
     payload.pop("recordSha256", None)
