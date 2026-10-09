@@ -1,26 +1,64 @@
 {
   "schemaVersion": 1,
-  "status": "template — filled by the snapshot-generation task",
-  "datasetId": "0.0.0-scaffold",
+  "datasetId": "2026.10.0",
+  "generatedAt": "2026-10-09T22:59:52.783218+00:00",
   "snapshot": {
     "seasons": "2020-2024",
     "format": "parquet",
-    "sha256": null
+    "sha256": "94762d23b85b39055d978eeff915820bddfe0494adbd01e0c6dfe4be2cb36b37"
+  },
+  "tables": {
+    "constructors": {
+      "rows": 14,
+      "sha256": "2a216d6e4a362e5b9b71977d9ea9584a50ba7d214179a8654f494fcbb52dba0e"
+    },
+    "drivers": {
+      "rows": 36,
+      "sha256": "6c312e608f0559bb98d019a1a704e673afcb96e71e24fa71b387f1092f7881b6"
+    },
+    "qualifying": {
+      "rows": 2138,
+      "sha256": "bd6f60ec037f68c751ff3b88c0733e07f6dfa5a1803298e904ed7daba31ce103"
+    },
+    "races": {
+      "rows": 107,
+      "sha256": "4c158e3c79f8da4ddc8de0b2167e84cb17a568e39ad01a432f01f84fddb28550"
+    },
+    "results": {
+      "rows": 2139,
+      "sha256": "f7160103da5695537108c198cc7afa58ec5bc242a81d6e55e4454e65147bda0d"
+    },
+    "sprints": {
+      "rows": 360,
+      "sha256": "f7c5ae28291f68dfbee747974f48b811cf9b0455da6f776c339b4625545a5ff6"
+    }
   },
   "sources": [
     {
       "provider": "jolpica-f1",
       "role": "primary historical results and standings",
-      "endpoints": [],
-      "fetchedAt": null,
+      "baseUrl": "https://api.jolpi.ca/ergast/f1",
+      "endpoints": [
+        "{season}.json",
+        "{season}/{round}/results.json",
+        "{season}/{round}/qualifying.json",
+        "{season}/{round}/sprint.json"
+      ],
+      "fetchedAt": "2026-10-09T22:59:52.473768+00:00",
       "license": "CC-BY-NC-SA-4.0"
     },
     {
       "provider": "openf1",
-      "role": "2023+ session detail (lap timing, weather)",
+      "role": "2023+ session detail (lap timing, weather) \u2014 not fetched in this dataset version",
+      "baseUrl": "https://api.openf1.org",
       "endpoints": [],
       "fetchedAt": null,
       "license": "non-commercial free tier"
     }
+  ],
+  "dataLimitations": [
+    "no in-race telemetry in the pinned window",
+    "no weather features before the 2023 rounds in the snapshot",
+    "sprint results exist only from the 2021 season onward"
   ]
 }

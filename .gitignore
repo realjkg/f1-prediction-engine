@@ -17,6 +17,7 @@ web/dist/
 .env
 .env.*.local
 .runs/
+.cache/
 
 # Editors / OS
 .DS_Store
