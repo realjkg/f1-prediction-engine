@@ -3,12 +3,15 @@ name = "f1engine"
 version = "0.1.0"
 description = "F1 race prediction engine — pinned-data, evidence-first demonstrator (Adapt Cloud)"
 requires-python = ">=3.12"
-# Milestone 1 scaffold: only the API surface is wired. Scikit-learn lands with
-# the models task, which pins the exact versions the determinism test enforces.
+# Milestone 1 scaffold: only the API surface is wired. Each engine dependency
+# is range-pinned; scikit-learn is additionally capped to one minor (1.7.x):
+# its estimator internals (binning, tie-breaking) are only deterministic
+# within a minor, and the determinism tests enforce the contract per version.
 dependencies = [
     "fastapi>=0.115,<1",
     "pydantic>=2.9,<3",
     "pyarrow>=18,<25",
+    "scikit-learn>=1.7,<1.8",
     "uvicorn>=0.32,<1",
 ]
 
