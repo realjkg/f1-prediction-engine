@@ -14,6 +14,9 @@ demo: ## One-command demo (stub) — verify → predict → prove → narrate �
 engine-install: ## Install the Python engine (editable, with dev tools)
 	python3 -m pip install -e "engine[dev]"
 
+refresh-data: ## Offline tool: regenerate the pinned snapshot from Jolpica (rate-aware, resumable)
+	python3 scripts/refresh-data.py
+
 web-install: ## Install the PWA workspace
 	npm --prefix web ci
 
@@ -21,6 +24,6 @@ test: ## Engine and web tests
 	python3 -m pytest engine/tests
 	npm --prefix web test
 
-lint: ## Ruff (engine) and tsc --noEmit (web)
-	python3 -m ruff check engine
+lint: ## Ruff (engine + scripts) and tsc --noEmit (web)
+	python3 -m ruff check engine scripts
 	npm --prefix web run lint
