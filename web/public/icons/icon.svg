@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="F1 Prediction Engine">
+  <rect width="512" height="512" rx="96" fill="#0b0f14"/>
+  <g fill="#2dd4bf">
+    <rect x="112" y="288" width="72" height="112" rx="12"/>
+    <rect x="220" y="208" width="72" height="192" rx="12"/>
+    <rect x="328" y="128" width="72" height="272" rx="12"/>
+  </g>
+</svg>

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "status": "template — filled by the snapshot-generation task",
+  "datasetId": "0.0.0-scaffold",
+  "snapshot": {
+    "seasons": "2020-2024",
+    "format": "parquet",
+    "sha256": null
+  },
+  "sources": [
+    {
+      "provider": "jolpica-f1",
+      "role": "primary historical results and standings",
+      "endpoints": [],
+      "fetchedAt": null,
+      "license": "CC-BY-NC-SA-4.0"
+    },
+    {
+      "provider": "openf1",
+      "role": "2023+ session detail (lap timing, weather)",
+      "endpoints": [],
+      "fetchedAt": null,
+      "license": "non-commercial free tier"
+    }
+  ]
+}
