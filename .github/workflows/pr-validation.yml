@@ -51,3 +51,7 @@ jobs:
         run: npm test
       - name: Type-check (tsc --noEmit)
         run: npx tsc --noEmit
+      - name: Capacitor smoke (build + cap sync)
+        run: |
+          npm run build
+          npx cap sync

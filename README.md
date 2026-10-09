@@ -38,6 +38,33 @@ The app is installable (manifest + service worker; registration is
 production-only). Mobile-first: single column, bottom tab navigation, five
 routes — Race (default), Models, Evidence, Observability, Settings.
 
+## Native shells (iOS + Android)
+
+The same PWA ships as a native app via
+[Capacitor](https://capacitorjs.com) — there is no second app codebase.
+`capacitor.config.ts` sits next to the web app; `web/android/` is a Gradle
+project and `web/ios/` an Xcode project, each wrapping the built web bundle.
+The copied web assets (`android/app/src/main/assets/public`,
+`ios/App/App/public`) are gitignored: every `cap sync` regenerates them from
+`dist/`.
+
+Prerequisites: [Android Studio](https://developer.android.com/studio) for
+Android; [Xcode](https://developer.apple.com/xcode/) on macOS for iOS.
+
+```bash
+cd web
+npm run build         # tsc --noEmit + vite build → dist/
+npx cap sync          # copies dist/ + plugin config into both native projects
+npx cap run android   # device/emulator via Android Studio
+npx cap run ios       # macOS + Xcode only
+```
+
+**macOS caveat:** iOS builds (and `cap run ios`) require Xcode, which exists
+only on macOS. The `ios/` project files are committed as generated — they are
+not build-verified on this repo's Linux sandbox or CI; `npx cap sync` covers
+both platforms there. Native store builds and store deployment are explicitly
+out of scope for Milestone 1.
+
 ## Repo layout
 
 | Path | Contents |
@@ -46,7 +73,7 @@ routes — Race (default), Models, Evidence, Observability, Settings.
 | `engine/tests/` | pytest — one flat file per domain |
 | `web/` | Vite + React + TS PWA (Race, Models, Evidence, Observability, Settings) |
 | `data/snapshot/` | Pinned dataset version, provenance template, data licenses |
-| `.github/workflows/` | `pr-validation`: pytest + ruff (engine), vitest + tsc (web); SHA-pinned actions, `contents: read` |
+| `.github/workflows/` | `pr-validation`: pytest + ruff (engine), vitest + tsc + Capacitor sync smoke (web); SHA-pinned actions, `contents: read` |
 
 ## Data & licensing
 
