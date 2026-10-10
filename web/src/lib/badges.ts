@@ -5,7 +5,9 @@
  */
 
 import type { BadgeId } from "../types";
-import { STREAK_FLAME_AT } from "./scoring";
+
+/** The streak flame threshold — the engine counts the streak, the UI carries the flame. */
+export const STREAK_FLAME_AT = 3;
 
 export interface BadgeInfo {
   id: BadgeId;

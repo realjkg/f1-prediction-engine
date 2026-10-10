@@ -1,32 +1,36 @@
-import type { BadgeId } from "../types";
+import type { BadgeId, RoundCallScore, StreakState } from "../types";
 import { BADGES } from "../lib/badges";
-import { STREAK_FLAME_AT, type RoundScore } from "../lib/scoring";
 
 interface RoundScoreCardProps {
-  score: RoundScore;
-  /** Streak count after this round's update. */
-  streakAfter: number;
+  /** The engine-computed round score (GET /api/races/{raceId}/score). */
+  round: RoundCallScore;
+  /** The engine's streak state for this round. */
+  streak: StreakState;
   /** Badges earned by this round. */
   badgesEarned: BadgeId[];
 }
 
-/** The round's score breakdown — engine rules, locally mirrored. */
-export function RoundScoreCard({ score, streakAfter, badgesEarned }: RoundScoreCardProps) {
+/** The round's score breakdown — every number engine-served. */
+export function RoundScoreCard({ round, streak, badgesEarned }: RoundScoreCardProps) {
   return (
     <section className="score-card" aria-label="Round score">
       <div className="score-total">
-        <span className="score-number">+{score.total}</span>
+        <span className="score-number">+{round.totalPoints}</span>
         <span className="score-unit">pts</span>
-        {score.multiplier > 1 && <span className="score-coin">COIN FLIP ×2</span>}
+        {round.coinFlip && <span className="score-coin">COIN FLIP ×2</span>}
       </div>
       <ul className="score-breakdown">
-        <li>{score.positionExactCount}× position-exact (+{score.positionExactCount * 5})</li>
-        {score.winnerBonus && <li>Winner called (+3)</li>}
-        {score.nearMissCount > 0 && <li>Near miss P4 (+{score.nearMissCount})</li>}
+        {round.picks.map((pick) => (
+          <li key={pick.slot} data-outcome={pick.outcome}>
+            {pick.slot.toUpperCase()} {pick.driverId} — {pick.outcome.toLowerCase().replace("_", " ")}
+            {pick.points > 0 ? ` (+${pick.points})` : ""}
+          </li>
+        ))}
       </ul>
       <p className="score-streak">
-        {streakAfter >= STREAK_FLAME_AT ? "FLAME " : ""}Streak: {streakAfter}
-        {streakAfter >= STREAK_FLAME_AT ? " — on fire" : ""}
+        {streak.flame ? "FLAME " : ""}
+        Streak: {streak.after}
+        {streak.flame ? " — on fire" : ""}
       </p>
       {badgesEarned.length > 0 && (
         <ul className="score-badges">

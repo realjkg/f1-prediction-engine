@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
-import { driverName, DRIVERS } from "../fixtures/drivers";
-import type { DigestPick, RoundCall } from "../types";
+import { driverCode, driverName } from "../lib/drivers";
+import type { RoundCall, DigestPick } from "../types";
 
 interface ModelCardProps {
   title: string;
   subtitle?: string;
   /** The podium call — the top-3 of a podium distribution, or the player's lock. */
   call: RoundCall | null;
-  /** The win pick: driver + probability. */
+  /** The win pick: driver + probability, from the engine's win distribution. */
   winPick: DigestPick | null;
   /** Finishing positions by driverId — present after the reveal. */
   landed?: Record<string, number> | null;
@@ -50,7 +50,7 @@ export function ModelCard({ title, subtitle, call, winPick, landed, highlight = 
             <li key={label}>
               <span className="podium-slot">{label}</span>
               <span className="podium-driver">
-                <span className="driver-code">{DRIVERS[driverId]?.code ?? driverId}</span>
+                <span className="driver-code">{driverCode(driverId)}</span>
                 {driverName(driverId)}
               </span>
               <LandedMark position={landed?.[driverId]} slot={index + 1} />

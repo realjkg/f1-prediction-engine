@@ -1,7 +1,7 @@
 {
-  "name": "F1 Prediction Engine",
-  "short_name": "F1 Predict",
-  "description": "Pinned-data F1 race predictions with per-model evidence. Advisory only.",
+  "name": "Pit Wall",
+  "short_name": "Pit Wall",
+  "description": "Call the podium on real 2020-2024 rounds, race three models and their ensemble, and read the evidence. Advisory only.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

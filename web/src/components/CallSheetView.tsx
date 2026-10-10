@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { driverName, DRIVERS } from "../fixtures/drivers";
+import { driverCode, driverName } from "../lib/drivers";
+import type { ApiError } from "../lib/api";
 import type { RoundCall } from "../types";
-import type { CallSheet } from "../fixtures/callsheets";
 
 export const CALL_SHEET_SECONDS = 30;
 
@@ -9,8 +9,17 @@ interface CallSheetViewProps {
   raceName: string;
   season: number;
   round: number;
-  sheet: CallSheet;
+  /**
+   * The field the models scored — the entrant list from the prediction
+   * record's distributions, name-sorted. The engine does not serve grid
+   * order or form over HTTP, so the sheet honestly offers the field, not
+   * a starting grid.
+   */
+  entrants: string[];
   datasetDigest: string;
+  /** True while the engine scores the lock. */
+  locking: boolean;
+  lockError: ApiError | null;
   onLock: (call: RoundCall) => void;
 }
 
@@ -19,11 +28,21 @@ function formatClock(seconds: number): string {
 }
 
 /**
- * The call sheet — "this is all the machine knows." Tap-tap-tap a podium,
- * 30-second countdown that never robs the call (picking stays available at
- * zero; the timer is pressure, not a gate).
+ * The call sheet — "this is the field the machine called." Tap-tap-tap a
+ * podium; the 30-second countdown never robs the call (picking stays
+ * available at zero; the timer is pressure, not a gate). A failed lock
+ * keeps every pick in place and surfaces the engine's typed error.
  */
-export function CallSheetView({ raceName, season, round, sheet, datasetDigest, onLock }: CallSheetViewProps) {
+export function CallSheetView({
+  raceName,
+  season,
+  round,
+  entrants,
+  datasetDigest,
+  locking,
+  lockError,
+  onLock,
+}: CallSheetViewProps) {
   const [picks, setPicks] = useState<string[]>([]);
   const [secondsLeft, setSecondsLeft] = useState(CALL_SHEET_SECONDS);
 
@@ -49,7 +68,7 @@ export function CallSheetView({ raceName, season, round, sheet, datasetDigest, o
     picks.indexOf(driverId) >= 0 ? `P${picks.indexOf(driverId) + 1}` : null;
 
   const lock = () => {
-    if (!complete) return;
+    if (!complete || locking) return;
     onLock({
       p1: picks[0],
       p2: picks[1],
@@ -66,7 +85,9 @@ export function CallSheetView({ raceName, season, round, sheet, datasetDigest, o
           {season} round {round}
         </p>
         <h1>{raceName}</h1>
-        <p className="call-sheet-frame">This is all the machine knows. Call the podium.</p>
+        <p className="call-sheet-frame">
+          The field the machine called. No grid order is served — pick your podium.
+        </p>
         <p className="call-sheet-timer" aria-live="polite">
           <span className={`timer${secondsLeft <= 10 ? " is-low" : ""}`}>{formatClock(secondsLeft)}</span>
           {secondsLeft === 0 && <span className="timer-note"> — your call stands whenever you're ready</span>}
@@ -83,29 +104,29 @@ export function CallSheetView({ raceName, season, round, sheet, datasetDigest, o
         </ol>
       )}
 
+      {lockError && (
+        <div className="engine-error is-inline" role="alert" data-error-code={lockError.code}>
+          <p className="engine-error-headline">The engine refused the lock — your picks are intact.</p>
+          <p className="engine-error-detail">
+            {lockError.code} — {lockError.message}
+          </p>
+        </div>
+      )}
+
       <ul className="grid-list">
-        {sheet.qualifying.map((line) => {
-          const formLine = sheet.form.find((f) => f.driverId === line.driverId);
-          const slot = slotOf(line.driverId);
+        {entrants.map((driverId) => {
+          const slot = slotOf(driverId);
           return (
-            <li key={line.driverId}>
+            <li key={driverId}>
               <button
                 type="button"
                 className={`grid-row${slot ? " is-picked" : ""}`}
                 aria-pressed={slot != null}
-                onClick={() => togglePick(line.driverId)}
+                onClick={() => togglePick(driverId)}
               >
-                <span className="grid-pos">{line.position ?? "—"}</span>
                 <span className="grid-driver">
-                  <span className="driver-code">{DRIVERS[line.driverId]?.code}</span>
-                  {driverName(line.driverId)}
-                </span>
-                <span className="grid-team">{DRIVERS[line.driverId]?.team}</span>
-                <span className="grid-delta">
-                  {line.deltaPoleMs == null ? "—" : `+${(line.deltaPoleMs / 1000).toFixed(3)}s`}
-                </span>
-                <span className="grid-form">
-                  {formLine ? formLine.recentFinishes.map((finish, i) => <i key={i}>{finish}</i>) : null}
+                  <span className="driver-code">{driverCode(driverId)}</span>
+                  {driverName(driverId)}
                 </span>
                 {slot && <span className="grid-slot">{slot}</span>}
               </button>
@@ -114,8 +135,8 @@ export function CallSheetView({ raceName, season, round, sheet, datasetDigest, o
         })}
       </ul>
 
-      <button type="button" className="lock-button" disabled={!complete} onClick={lock}>
-        {complete ? "LOCK IT" : `Pick ${3 - picks.length} more`}
+      <button type="button" className="lock-button" disabled={!complete || locking} onClick={lock}>
+        {locking ? "SCORING…" : complete ? "LOCK IT" : `Pick ${3 - picks.length} more`}
       </button>
     </section>
   );
