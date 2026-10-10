@@ -85,6 +85,10 @@ class WeatherReliability:
     wet_classification_rate: float | None
     dry_classification_rate: float | None
     forecast_weighted_classification_rate: float | None
+    driver_baseline_classification_rate: float | None
+    driver_condition_modifier: float | None
+    wet_experience_weight: float
+    dry_experience_weight: float
 
 
 def prior_weather_reliability(
@@ -95,16 +99,20 @@ def prior_weather_reliability(
     *,
     prediction_cutoff: datetime,
     minimum_per_condition: int = 2,
+    shrinkage_races: int = 4,
 ) -> WeatherReliability:
     """Use historical observed weather only for strictly earlier races.
 
-    With incomplete condition samples, the forecast-weighted metric remains
-    missing; replacing that uncertainty with a fabricated constant is not
-    allowed in model search or production inference.
+    Weather modifies an individual driver's historical completion baseline;
+    it is never a standalone determinant of a finish or a win. The wet/dry
+    deviations are shrunk toward that driver's own all-condition experience.
+    Missing condition samples are explicitly insufficient, not imputed.
     """
     forecast.validate_as_of(prediction_cutoff)
     if minimum_per_condition < 1:
         raise ValueError("minimum_per_condition must be positive")
+    if shrinkage_races < 1:
+        raise ValueError("shrinkage_races must be positive")
     conditions: dict[tuple[int, int], bool] = {}
     for observation in historical:
         key = (observation.season, observation.round)
@@ -117,26 +125,41 @@ def prior_weather_reliability(
         conditions[key] = observation.observed_rain
 
     grouped: dict[bool, list[float]] = {True: [], False: []}
+    all_prior: list[float] = []
     for season, round_number, status in db.execute(
         "SELECT season, round, status FROM results WHERE driver_id=? "
         "AND (season < ? OR (season=? AND round < ?)) "
         "ORDER BY season, round",
         (driver_id, forecast.season, forecast.season, forecast.round),
     ):
+        finished = float(_classified(status))
+        all_prior.append(finished)
         condition = conditions.get((season, round_number))
         if condition is not None:
-            grouped[condition].append(float(_classified(status)))
+            grouped[condition].append(finished)
     wet, dry = grouped[True], grouped[False]
     wet_mean = sum(wet) / len(wet) if len(wet) >= minimum_per_condition else None
     dry_mean = sum(dry) / len(dry) if len(dry) >= minimum_per_condition else None
-    weighted = (
-        forecast.rain_probability * wet_mean
-        + (1.0 - forecast.rain_probability) * dry_mean
-        if wet_mean is not None and dry_mean is not None else None
+    baseline = sum(all_prior) / len(all_prior) if all_prior else None
+    wet_weight = len(wet) / (len(wet) + shrinkage_races)
+    dry_weight = len(dry) / (len(dry) + shrinkage_races)
+    # Rain probability changes the *importance* of a driver's historical
+    # wet/dry performance deviations. It never directly sets their ability.
+    modifier = (
+        forecast.rain_probability * wet_weight * (wet_mean - baseline)
+        + (1.0 - forecast.rain_probability) * dry_weight
+        * (dry_mean - baseline)
+        if baseline is not None and wet_mean is not None and dry_mean is not None
+        else None
     )
+    adjusted = baseline + modifier if modifier is not None else None
     return WeatherReliability(
         wet_prior_races=len(wet), dry_prior_races=len(dry),
         wet_classification_rate=wet_mean,
         dry_classification_rate=dry_mean,
-        forecast_weighted_classification_rate=weighted,
+        forecast_weighted_classification_rate=adjusted,
+        driver_baseline_classification_rate=baseline,
+        driver_condition_modifier=modifier,
+        wet_experience_weight=wet_weight,
+        dry_experience_weight=dry_weight,
     )
