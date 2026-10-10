@@ -63,7 +63,7 @@ a pre-race entry list instead. No pre-lights-out frozen forecast exists here.
 ## Next promotion gates (Issue #25 remains open)
 
 1. Add an authoritative source-published-at/effective-at field per current
-   qualifying, official starter and penalty, weather and tyre input.
+   qualifying, official starter and penalty, weather and tire input.
 2. Freeze a complete input manifest, official grid, model digest,
    probabilities and prediction-cutoff time before the race.
 3. Fit probability calibration *only* on eligible past seasons; test 2026

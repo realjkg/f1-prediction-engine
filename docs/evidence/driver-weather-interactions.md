@@ -26,7 +26,7 @@ Race conditions affect drivers differently depending on previous wet/dry experie
 
 This is a *modifier* to driver skill/form in later challenger models. Weather itself never changes a driver into a certain winner, and a single wet race cannot define a permanent driver trait. The experimental `weather_context.py` contract calculates historical wet/dry deviations and refuses forecast timestamps after inference cutoff. It does **not** yet ingest a trustworthy archived weather forecast dataset or feed weather variables to training automatically.
 
-Rain chance, track temperature, wind, tyre performance, car setup and wet-transition timing should become separate driver × team × environment interactions when timestamped inputs are available. Historical observed race conditions must never be used as if they were a forecast made before lights out.
+Rain chance, track temperature, wind, tire performance, car setup and wet-transition timing should become separate driver × team × environment interactions when timestamped inputs are available. Historical observed race conditions must never be used as if they were a forecast made before lights out.
 
 ## Decision boundaries
 
@@ -56,7 +56,7 @@ time **against the fastest valid time within that same session**, then
 records the driver's relative-gap improvement into Q3. Thus Leclerc's
 late improvement is not mistakenly labeled declining ability because
 Hamilton was initially quicker. Comparisons with the teammate help
-partially control for car performance; tyre choice, team strategy, traffic,
+partially control for car performance; tire choice, team strategy, traffic,
 setup, track evolution and gaps between clean laps are *not* yet isolated.
 
 This qualifies as *post-qualifying* known evidence for the October 11 race,

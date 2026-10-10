@@ -96,7 +96,7 @@ CI secrets. There is no supported Linux-Docker replacement for Xcode.
   after reproducible builds and licensing checks. Evaluate private Qwen/Mistral
   for explainable race briefs or feature extraction, not as an unproven numeric
   probability oracle. LLM-generated facts are never allowed as labels.
-- Supply live/current qualifying, confirmed grid, weather forecast, tyre and
+- Supply live/current qualifying, confirmed grid, weather forecast, tire and
   practice session data with publication timestamps; only data available
   before the prediction cutoff may enter feature generation.
 - Add mobile contract smoke tests against a TLS API and upgrade handling

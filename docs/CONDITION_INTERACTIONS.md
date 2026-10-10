@@ -1,7 +1,7 @@
 # Weather as an interaction, not a race-result determinant
 
 **Design correction:** weather changes the physical conditions and how a
-driver/team/tyre package can perform. It is not an independent reason to pick
+driver/team/tire package can perform. It is not an independent reason to pick
 a race winner. The forecast's effect belongs in learned conditional performance
 interactions, behind a time-stamped source-evidence gate.
 
