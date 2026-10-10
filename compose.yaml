@@ -40,7 +40,7 @@ services:
     entrypoint: ["/bin/sh", "-eu", "-c"]
     command:
       - |
-        : "${F1E_AS_OF:?Set F1E_AS_OF=YYYY-MM-DD (exclusive cutoff)}"
+        : "$${F1E_AS_OF:?Set F1E_AS_OF=YYYY-MM-DD (exclusive cutoff)}"
         python scripts/refresh-data.py --seasons 2025-2026 \
           --as-of "$$F1E_AS_OF" \
           --data-dir /artifacts/snapshot-2025-2026 \
