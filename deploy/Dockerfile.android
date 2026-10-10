@@ -1,0 +1,30 @@
+# Reproducible Android DEBUG APK builder; iOS compilation still uses macOS/Xcode.
+FROM eclipse-temurin:21-jdk-noble AS android-builder
+COPY --from=node:24-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:24-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
+ARG VITE_F1E_API_BASE_URL
+ENV VITE_F1E_API_BASE_URL=${VITE_F1E_API_BASE_URL}
+ENV ANDROID_HOME=/opt/android-sdk
+ENV ANDROID_SDK_ROOT=/opt/android-sdk
+ENV PATH="${PATH}:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl unzip && \
+    rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /opt/android-sdk/cmdline-tools && \
+    curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+      -o /tmp/android-tools.zip && \
+    unzip -q /tmp/android-tools.zip -d /opt/android-sdk/cmdline-tools && \
+    mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest && \
+    rm /tmp/android-tools.zip
+RUN yes | sdkmanager --licenses >/dev/null && \
+    sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+WORKDIR /app
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build:mobile && \
+    cd android && sh gradlew --no-daemon assembleDebug
+
+FROM scratch AS artifact
+COPY --from=android-builder /app/android/app/build/outputs/apk/debug/app-debug.apk /f1-pitwall-debug.apk

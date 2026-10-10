@@ -1,0 +1,76 @@
+name: Mobile Native Build Smoke
+
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - "deploy/Dockerfile.android"
+      - ".github/workflows/mobile-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android unsigned-test/debug APK (no store release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      # GitHub Ubuntu runners already include a current Android command-line SDK.
+      # setup-android v3 attempts to install the removed legacy "tools" package.
+      - name: Verify Android SDK and install API 35
+        run: |
+          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" "build-tools;35.0.0"
+      - name: Build native Capacitor package
+        working-directory: web
+        env:
+          # Build-time smoke host is deliberately nonfunctional; a release
+          # must be rebuilt with the actual production HTTPS backend origin.
+          VITE_F1E_API_BASE_URL: https://backend.example.invalid
+        run: |
+          npm ci
+          npm run build:mobile
+          cd android
+          sh gradlew --no-daemon assembleDebug
+      - name: Publish nonrelease APK for installation checks
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1-pitwall-debug-test-only
+          path: web/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+          if-no-files-found: error
+
+  ios:
+    name: iOS Simulator compilation (manual macOS build)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24"
+      - name: Build iOS Capacitor shell and Xcode Simulator target
+        working-directory: web
+        env:
+          VITE_F1E_API_BASE_URL: https://backend.example.invalid
+        run: |
+          npm ci
+          npm run build:mobile
+          xcodebuild -workspace ios/App/App.xcworkspace \
+            -scheme App -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build
