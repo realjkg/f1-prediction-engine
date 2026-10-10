@@ -29,7 +29,7 @@ self-describes what its numbers mean):
 from __future__ import annotations
 
 import time
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from f1engine.ensemble import EnsembleVerdict, ModelWeights, arbitrate
@@ -127,6 +127,37 @@ def score_round(
     )
 
 
+@dataclass(frozen=True)
+class ClassifiedResult:
+    """One round's classified result, exactly as the backtest scores it.
+
+    The single classification of "what actually happened": the winner, the
+    podium@3 actual (first three classified — shorter when fewer finished),
+    and the full classified finishing order (P4 lives at index 3, which the
+    game's near-miss rule needs). The game scoring module consumes this type
+    rather than re-deriving results — one source of truth.
+    """
+
+    winner: str
+    podium: tuple[str, ...]
+    classified: tuple[str, ...]
+
+
+def classify_round(entries: Iterable[tuple[int | None, str]]) -> ClassifiedResult | None:
+    """Classify one round's result entries; None when no classified winner.
+
+    Entries are (classified position, driver id); None positions (DNFs,
+    unclassified runners) are excluded, and a round whose best classified
+    position is not 1 has no winner to score against. Public so the game
+    scoring and the /result endpoint classify exactly as run_backtest does.
+    """
+    classified = sorted(entry for entry in entries if entry[0] is not None)
+    if not classified or classified[0][0] != 1:
+        return None
+    order = tuple(driver_id for _, driver_id in classified)
+    return ClassifiedResult(winner=order[0], podium=order[:3], classified=order)
+
+
 def _actuals(
     dataset: PinnedDataset,
 ) -> dict[tuple[int, int], tuple[str, tuple[str, ...]]]:
@@ -138,14 +169,9 @@ def _actuals(
         )
     scored: dict[tuple[int, int], tuple[str, tuple[str, ...]]] = {}
     for key, entries in entries_by_round.items():
-        classified = sorted(
-            (entry for entry in entries if entry[0] is not None),
-        )
-        if not classified or classified[0][0] != 1:
-            continue  # no classified winner — nothing to score against
-        winner = classified[0][1]
-        podium = tuple(driver_id for _, driver_id in classified[:3])
-        scored[key] = (winner, podium)
+        result = classify_round(entries)
+        if result is not None:
+            scored[key] = (result.winner, result.podium)
     return scored
 
 
