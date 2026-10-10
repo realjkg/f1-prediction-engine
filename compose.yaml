@@ -1,0 +1,68 @@
+name: f1-pitwall
+services:
+  engine:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.engine
+    environment:
+      F1E_DATA_DIR: data/snapshot
+      F1E_LEDGER_PATH: data/evidence/ledger.jsonl
+      F1E_DEMO_SEASON: "2024"
+      F1E_BRIEF_MODE: fixture
+      F1E_CORS_ORIGINS: "${F1E_CORS_ORIGINS:-capacitor://localhost,http://localhost,https://localhost}"
+    volumes:
+      - evidence:/app/data/evidence
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+    depends_on:
+      engine:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${F1E_HTTP_PORT:-8080}:80"
+    restart: unless-stopped
+
+  # Deliberate, isolated data refresh. Creates a new snapshot/DB in /artifacts;
+  # it does NOT silently change the model or deploy unaudited predictions.
+  trainer:
+    profiles: [training]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.engine
+    entrypoint: ["/bin/sh", "-eu", "-c"]
+    command:
+      - |
+        : "${F1E_AS_OF:?Set F1E_AS_OF=YYYY-MM-DD (exclusive cutoff)}"
+        python scripts/refresh-data.py --seasons 2025-2026 \
+          --as-of "$$F1E_AS_OF" \
+          --data-dir /artifacts/snapshot-2025-2026 \
+          --cache-dir /artifacts/cache \
+          --dataset-id "2025-2026-through-$$F1E_AS_OF"
+        python scripts/build-training-store.py \
+          --snapshot /app/data/snapshot \
+          --snapshot /artifacts/snapshot-2025-2026 \
+          --as-of "$$F1E_AS_OF" \
+          --output /artifacts/f1-training.sqlite
+        python scripts/benchmark-training-store.py \
+          --store /artifacts/f1-training.sqlite \
+          --season 2025 --season 2026 \
+          --report /artifacts/holdout-report.json
+    environment:
+      F1E_AS_OF: "${F1E_AS_OF:-}"
+    volumes:
+      - training:/artifacts
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  evidence:
+  training:
