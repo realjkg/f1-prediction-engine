@@ -6,6 +6,10 @@ on:
       - "scripts/refresh-data.py"
       - "scripts/build-training-store.py"
       - "engine/f1engine/training_store.py"
+      - "engine/f1engine/qualifying_features.py"
+      - "engine/f1engine/store_benchmark.py"
+      - "scripts/benchmark-training-store.py"
+      - "engine/tests/test_qualifying_features.py"
       - "engine/tests/test_training_store.py"
       - ".github/workflows/refresh-season-data.yml"
   workflow_dispatch:
