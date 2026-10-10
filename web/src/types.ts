@@ -7,13 +7,14 @@
  * - ModelPrediction / ModelDiagnostics                — engine/f1engine/models.py
  * - EnsembleVerdict / Consensus                      — engine/f1engine/ensemble.py
  * - RaceSummary / RacesView / ModelsView / EvidencePage /
- *   ConfigView                                        — engine/f1engine/app.py
- * - RaceBrief / BriefContent / RaceDigest            — engine/f1engine/brief.py
+ *   ConfigView / PredictionsView / RaceResultView /
+ *   CallScore                                        — engine/f1engine/app.py + scoring.py
+ * - BacktestRecord / BacktestMetrics                  — engine/f1engine/evidence.py
  *
- * These are the shapes PR #6's FastAPI surface serves (FastAPI serializes
+ * These are the shapes the FastAPI read surface serves (FastAPI serializes
  * response models by alias, so the wire is camelCase — engine/tests/test_api.py
- * asserts `record["advisoryOnly"]`). The UI task consumes them as typed
- * fixtures; live wiring replaces the fixture import without touching types.
+ * asserts `record["advisoryOnly"]`). Live screens consume them through the
+ * typed client (lib/api.ts); test fixtures mirror these shapes.
  */
 
 /** Model roster ids — closed set, mirrors models.MODEL_IDS + the ensemble key. */
@@ -130,12 +131,69 @@ export interface ModelsView {
 
 /** engine/f1engine/app.py EvidencePage */
 export interface EvidencePageView {
-  records: PredictionRecord[];
+  records: LedgerRecord[];
   total: number;
   offset: number;
   limit: number;
   /** Always true in a served page — a failed page is a 503. */
   chainValid: boolean;
+}
+
+/**
+ * engine/f1engine/evidence.py BacktestRecord — measured accuracy as ledger
+ * evidence. Same envelope rules as PredictionRecord: advisory-only,
+ * self-describing, hash-chained.
+ */
+export interface BacktestRecord {
+  schemaVersion: 1;
+  recordType: "backtest";
+  backtestId: string;
+  season: number;
+  firstRound: number;
+  lastRound: number;
+  roundsScored: number;
+  generatedAt: string;
+  dataset: DatasetIdentity;
+  evidenceBasis: string;
+  metricDefinitions: Record<string, string>;
+  /** Keyed by MODEL_IDS + "ensemble" — closed at build time by the engine. */
+  metrics: Record<string, BacktestMetrics>;
+  skippedRounds: { season: number; round: number; code: string; message: string }[];
+  advisoryOnly: true;
+  dataLimitations: string[];
+  prevRecordSha256: string | null;
+  recordSha256: string;
+}
+
+/** Any record the ledger serves — prediction or backtest. */
+export type LedgerRecord = PredictionRecord | BacktestRecord;
+
+/**
+ * Race identity the CLIENT keys by: the engine's predictionId format
+ * ("2024-r12-british-grand-prix"). Snapshot race ids are unique per season,
+ * not globally (28 of 107 repeat across years), so every client-side key and
+ * every race-scoped request carries the season.
+ */
+export type RaceKey = string;
+
+/** The season-qualified identity key for a race row or prediction record. */
+export function raceKeyOf(season: number, round: number, raceId: string): RaceKey {
+  return `${season}-r${round}-${raceId}`;
+}
+
+/** engine/f1engine/app.py EventView — already redacted at creation. */
+export interface EventView {
+  /** Closed signal enum (engine/f1engine/observability.py) — served as a string. */
+  signal: string;
+  status: string;
+  occurredAt: string;
+  detail: Record<string, unknown>;
+}
+
+/** engine/f1engine/app.py EventsView */
+export interface EventsView {
+  events: EventView[];
+  total: number;
 }
 
 /** engine/f1engine/app.py ConfigView — the Settings screen's operating contract. */
@@ -146,6 +204,67 @@ export interface ConfigView {
   advisoryNotice: string;
   consensusThreshold: number;
   briefMode: "fixture" | "live";
+}
+
+/** engine/f1engine/app.py PredictionsView */
+export interface PredictionsView {
+  predictions: PredictionRecord[];
+  total: number;
+}
+
+/** engine/f1engine/app.py ClassifiedFinish */
+export interface ClassifiedFinish {
+  position: number;
+  driverId: string;
+}
+
+/** engine/f1engine/app.py RaceResultView — the reveal's actual column. */
+export interface RaceResultView {
+  raceId: string;
+  season: number;
+  round: number;
+  name: string;
+  date: string;
+  winner: string;
+  /** Podium@3 actual — the backtest's classification (shorter on DNFs). */
+  podium: string[];
+  classified: ClassifiedFinish[];
+}
+
+/** engine/f1engine/scoring.py PickOutcome — closed set. */
+export type PickOutcome = "EXACT" | "NEAR_MISS" | "MISS";
+
+/** engine/f1engine/scoring.py PickCallScore */
+export interface PickCallScore {
+  slot: "p1" | "p2" | "p3";
+  driverId: string;
+  /** Classified finishing position; null = not classified (DNF, absent). */
+  actualPosition: number | null;
+  outcome: PickOutcome;
+  points: number;
+}
+
+/** engine/f1engine/scoring.py StreakState — extension-only by design. */
+export interface StreakState {
+  before: number;
+  after: number;
+  delta: number;
+  flame: boolean;
+}
+
+/** engine/f1engine/scoring.py RoundCallScore */
+export interface RoundCallScore {
+  picks: PickCallScore[]; // call order: p1, p2, p3
+  basePoints: number;
+  consensusFlag: ConsensusFlag | null;
+  coinFlip: boolean;
+  totalPoints: number;
+}
+
+/** engine/f1engine/scoring.py CallScore — the score endpoint's full response. */
+export interface CallScore {
+  round: RoundCallScore;
+  streak: StreakState;
 }
 
 /** engine/f1engine/brief.py DigestPick */
@@ -232,7 +351,7 @@ export interface BacktestMetrics {
  * no accounts in Milestone 1). Not an engine wire type.
  */
 
-/** The player's locked podium call, by driver id. Scoring mirrors lib/scoring. */
+/** The player's locked podium call, by driver id. Scored only by the engine. */
 export interface RoundCall {
   p1: string;
   p2: string;
@@ -255,11 +374,43 @@ export type BadgeId =
   | "data-nerd"
   | "perfect-round";
 
+/**
+ * The engine-computed summary of one locked round's score — mirrored
+ * verbatim from the engine's /score response (the client never computes
+ * scores). Stored per competitor on the round's lock so the Gauntlet
+ * standings survive reload without recomputation.
+ */
+export interface RoundScoreSummary {
+  positionExactCount: number;
+  winnerBonus: boolean;
+  nearMissCount: number;
+  basePoints: number;
+  coinFlip: boolean;
+  totalPoints: number;
+  /** The ledger's consensus flag the engine applied — null when no verdict. */
+  consensusFlag: ConsensusFlag | null;
+}
+
+/**
+ * The outcome of one engine-scored lock: the player's full score response
+ * (picks, streak state) plus the badges the updated record earned.
+ */
+export interface LockOutcome {
+  score: CallScore;
+  badgesEarned: BadgeId[];
+}
+
 /** The pit-wall record: the player's local game state. */
 export interface PitWallRecord {
   profileName: string;
-  /** Locked calls by globally unique raceId — the localStorage identity binding. */
-  calls: Record<string, RoundCall>;
+  /** Locked calls by season-qualified race key (raceKeyOf) — the localStorage identity binding. */
+  calls: Record<RaceKey, RoundCall>;
+  /**
+   * Engine-computed round scores by race key, per competitor — the standings
+   * and badge inputs read from these; nothing is recomputed client-side.
+   * Written only when the engine scored every competitor (atomic locks).
+   */
+  roundScores: Record<RaceKey, Record<CompetitorId, RoundScoreSummary>>;
   /** Consecutive rounds with at least one position-exact pick (flame at 3). */
   streak: number;
   bestStreak: number;
