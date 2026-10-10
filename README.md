@@ -43,6 +43,39 @@ Other entry points: `make test` (pytest + vitest), `make lint`
 (ruff + tsc --noEmit), `make refresh-data` (offline tool to regenerate the
 pinned snapshot from Jolpica — rate-aware, resumable, never a runtime step).
 
+## Versioned training data engine
+
+`make training-store` materializes the *hash-verified* snapshot, its
+**strictly-prior-round feature vectors**, supervised result labels and each
+model's forecast probabilities into a local SQLite database at
+`data/training/f1-training.sqlite`. No additional server or Python package
+is needed. The database persists across runs and is gitignored.
+
+To evaluate a refreshed 2026 dataset (when available and separately
+validated), run:
+
+```bash
+python3 scripts/build-training-store.py \
+  --data-dir data/snapshot-fall-2026 --season 2026 \
+  --db data/training/f1-training.sqlite --revision baseline-2026-v1
+```
+
+Each dataset is identified by its content digest; model predictions are keyed
+by dataset, season and explicitly named **model revision**. Identical imports
+are repeatable; changed records under an existing identity fail rather than
+overwrite prior evidence. `TrainingStore.training_examples_before(...)`
+returns labeled examples from *earlier* rounds only. Current-race qualifying
+is not an input until timestamped session facts and a pre-race model are
+implemented and tested separately.
+
+**This is a versioned training and evaluation store, not continuous online
+learning.** A snapshot refresh and retraining are explicit, auditable steps.
+Additional historical data or more complex models are candidates, not
+guaranteed accuracy improvements. Require time-split challenger backtests and
+winner-probability calibration evidence before promoting a new model.
+The current model cannot directly assign exact P3/P4 probabilities; that
+requires a future finish-order model and independent validation.
+
 ## What the app demonstrates
 
 | Capability | What the demo shows |
