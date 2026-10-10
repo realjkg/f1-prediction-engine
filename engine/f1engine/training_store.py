@@ -135,7 +135,9 @@ def build_training_store(
     output.parent.mkdir(parents=True, exist_ok=True)
     tmp_name = ""
     try:
-        with NamedTemporaryFile(prefix="f1-store-", suffix=".sqlite", dir=output.parent, delete=False) as tmp:
+        with NamedTemporaryFile(
+            prefix="f1-store-", suffix=".sqlite", dir=output.parent, delete=False
+        ) as tmp:
             tmp_name = tmp.name
         with sqlite3.connect(tmp_name) as db:
             db.executescript(SCHEMA)
@@ -145,7 +147,10 @@ def build_training_store(
                 ("source_count", str(len(snapshots))),
             ])
             db.executemany("INSERT INTO datasets VALUES (?, ?, ?, ?)", [
-                (s.dataset_id, s.dataset_sha256, s.provenance.snapshot.seasons, s.provenance.generatedAt)
+                (
+                    s.dataset_id, s.dataset_sha256, s.provenance.snapshot.seasons,
+                    s.provenance.generatedAt,
+                )
                 for s in snapshots
             ])
             db.executemany("INSERT INTO races VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [
@@ -188,7 +193,9 @@ def build_training_store(
             "results": len(combined.results), "samples": len(rows)}
 
 
-def training_rows_before(db: sqlite3.Connection, season: int, round_number: int) -> list[TrainingSample]:
+def training_rows_before(
+    db: sqlite3.Connection, season: int, round_number: int
+) -> list[TrainingSample]:
     """Fit only on prior rounds. Query ordering is deterministic."""
     cols = ", ".join(FEATURE_NAMES)
     sql = (
