@@ -17,7 +17,12 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from f1engine.driver_dynamics import dynamics_feature_index, with_dynamics
 from f1engine.qualifying_features import qualifying_feature_index, with_qualifying
+from f1engine.session_progression import (
+    session_progression_index,
+    with_session_progression,
+)
 from f1engine.training_store import FEATURE_NAMES, TrainingSample, training_rows_before
 
 
@@ -118,7 +123,11 @@ def _predict(
         return _win_normalize(strength), strength
     x_train = _array(history)
     x_target = _array(target)
-    estimator_name = method.removesuffix("-qual")
+    estimator_name = (
+        method.removesuffix("-qual")
+        .removesuffix("-session")
+        .removesuffix("-dyn")
+    )
     win_model = _estimator(estimator_name)
     top4_model = _estimator(estimator_name)
     win_model.fit(x_train, np.asarray([row.won for row in history]))
@@ -135,10 +144,14 @@ def evaluate_season(
     if method not in {
         "form", "logit", "gbm", "logit-qual", "gbm-qual", "pole",
         "gbm-shallow-qual", "gbm-regularized-qual", "logit-shrink-qual",
+        "gbm-dyn-qual", "logit-dyn-qual",
+        "gbm-session-qual", "gbm-dyn-session-qual",
     }:
         raise ValueError("unsupported method")
     qualify = method.endswith("-qual") or method == "pole"
     qualifying_index = qualifying_feature_index(db) if qualify else {}
+    dynamics_index = dynamics_feature_index(db) if "-dyn-" in method else {}
+    session_index = session_progression_index(db) if "-session-" in method else {}
     rounds = [
         row[0] for row in db.execute(
             "SELECT DISTINCT round FROM training_samples "
@@ -168,6 +181,12 @@ def evaluate_season(
                 continue
             previous = with_qualifying(previous, qualifying_index)
             target = with_qualifying(target, qualifying_index)
+        if dynamics_index:
+            previous = with_dynamics(previous, dynamics_index)
+            target = with_dynamics(target, dynamics_index)
+        if session_index:
+            previous = with_session_progression(previous, session_index)
+            target = with_session_progression(target, session_index)
         if method != "form" and (
             len({row.won for row in previous}) < 2
             or len({row.top4 for row in previous}) < 2
