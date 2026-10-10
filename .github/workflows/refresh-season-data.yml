@@ -10,6 +10,8 @@ on:
       - "engine/f1engine/store_benchmark.py"
       - "engine/f1engine/model_search.py"
       - "engine/f1engine/driver_dynamics.py"
+      - "engine/f1engine/session_progression.py"
+      - "engine/tests/test_session_progression.py"
       - "engine/f1engine/weather_context.py"
       - "engine/tests/test_driver_dynamics.py"
       - "engine/tests/test_weather_context.py"
