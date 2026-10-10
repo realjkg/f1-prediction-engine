@@ -1,24 +1,41 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { BottomNav, ROUTES, type Route } from "./components/BottomNav";
+import { EngineErrorPanel, Loading } from "./components/EngineError";
 import { BriefPage } from "./routes/BriefPage";
 import { EvidencePage } from "./routes/EvidencePage";
 import { ModelsPage } from "./routes/ModelsPage";
 import { ObservabilityPage } from "./routes/ObservabilityPage";
 import { RacePage } from "./routes/RacePage";
 import { SettingsPage } from "./routes/SettingsPage";
-import { CALL_SHEETS } from "./fixtures/callsheets";
-import { RECORDS_BY_RACE_ID } from "./fixtures/records";
-import { badgesForRound } from "./lib/badges";
+import { engineClient, ApiError } from "./lib/api";
 import {
+  ConfigProvider,
+  EngineClientProvider,
+  useConfigReady,
+  useEngineClient,
+  useResource,
+  advisoryBasis,
+} from "./lib/engine";
+import {
+  applyLockedRound,
   browserStorage,
   clearRecord,
   emptyRecord,
   loadRecord,
   saveRecord,
 } from "./lib/pitwall";
-import { seasonStandings } from "./lib/standings";
-import { scoreRound, streakExtends } from "./lib/scoring";
-import type { PitWallRecord, RoundCall } from "./types";
+import { summarizeRoundScore } from "./lib/calls";
+import { COMPETITORS, callForCompetitor, type RoundCompetitorScores } from "./lib/standings";
+import type {
+  CallScore,
+  LockOutcome,
+  PitWallRecord,
+  PredictionRecord,
+  RaceIdentity,
+  RaceKey,
+  RoundCall,
+} from "./types";
+import { raceKeyOf } from "./types";
 
 function routeFromHash(): Route {
   const candidate = window.location.hash.replace(/^#\/?/, "");
@@ -26,6 +43,42 @@ function routeFromHash(): Route {
 }
 
 export default function App() {
+  return (
+    <EngineClientProvider value={engineClient}>
+      <EngineConfigGate>
+        <Shell />
+      </EngineConfigGate>
+    </EngineClientProvider>
+  );
+}
+
+/**
+ * The engine's operating contract gates the whole app: nothing renders —
+ * not even a picker — until GET /api/config answers, and a dead engine is
+ * the typed error surface with retry, never stale or mock data.
+ */
+function EngineConfigGate({ children }: { children: ReactNode }) {
+  const client = useEngineClient();
+  const config = useResource(() => client.getConfig(), []);
+
+  if (config.status === "loading") {
+    return <Loading label="Engine configuration" />;
+  }
+  if (config.status === "error") {
+    return (
+      <EngineErrorPanel
+        error={config.error}
+        onRetry={config.retry}
+        context="Engine configuration"
+      />
+    );
+  }
+  return <ConfigProvider value={{ status: "ready", config: config.data }}>{children}</ConfigProvider>;
+}
+
+function Shell() {
+  const client = useEngineClient();
+  const config = useConfigReady();
   const [route, setRoute] = useState<Route>(routeFromHash);
   const [record, setRecord] = useState<PitWallRecord>(() => loadRecord(browserStorage()));
 
@@ -42,47 +95,50 @@ export default function App() {
   };
 
   /**
-   * Persist the call: record + streak + best streak + badge union, computed
-   * with the same scoring mirror the engine serves (TODO(api-wiring): the
-   * lock endpoint becomes authoritative — client keeps only the optimistic
-   * copy).
+   * The lock: ask the ENGINE to score the player's call and each
+   * competitor's podium call (consensus flag comes from the ledger
+   * server-side; streak_before from the local record), then fold the
+   * responses into the pit-wall record. Atomic — any failed score call
+   * fails the lock and nothing is stored.
    */
-  const lockCall = useCallback((raceId: string, call: RoundCall) => {
-    setRecord((current) => {
-      const sheet = CALL_SHEETS[raceId];
-      const predictionRecord = RECORDS_BY_RACE_ID[raceId];
-      if (!sheet || !predictionRecord) {
-        throw new Error(`Fixture inconsistency: no call sheet or prediction record for ${raceId}`);
+  const lockCall = useCallback(
+    async (
+      race: RaceIdentity,
+      call: RoundCall,
+      predictionRecord: PredictionRecord,
+    ): Promise<LockOutcome> => {
+      const raceKey: RaceKey = raceKeyOf(race.season, race.round, race.raceId);
+      const scores = {} as RoundCompetitorScores;
+      let playerScore: CallScore | null = null;
+      for (const competitor of COMPETITORS) {
+        const competitorCall = callForCompetitor(predictionRecord, competitor, call);
+        if (!competitorCall) {
+          throw new ApiError(
+            "RESPONSE_INVALID",
+            `no podium call derivable for ${competitor} — the record's distribution has fewer than three drivers`,
+          );
+        }
+        const score = await client.getRaceScore(
+          race.raceId,
+          [competitorCall.p1, competitorCall.p2, competitorCall.p3],
+          competitor === "you" ? record.streak : 0,
+          race.season,
+        );
+        scores[competitor] = summarizeRoundScore(score.round);
+        if (competitor === "you") playerScore = score;
       }
-      const flag = predictionRecord.ensemble.consensus.flag;
-      const score = scoreRound(call, sheet.finishingOrder, flag);
-      const streakAfter = streakExtends(score) ? current.streak + 1 : 0;
-      const base: PitWallRecord = {
-        ...current,
-        calls: { ...current.calls, [raceId]: call },
-        streak: streakAfter,
-        bestStreak: Math.max(current.bestStreak, streakAfter),
-      };
-      // Badge evaluation sees the record INCLUDING this round — standings
-      // recomputed over `base` count this round's points.
-      const standings = seasonStandings(base);
-      const earned = badgesForRound({
-        exactPodium: score.positionExactCount === 3,
-        winnerCalled: score.winnerBonus,
-        streakAfterRound: streakAfter,
-        playerPoints: standings.find((entry) => entry.competitorId === "you")?.points ?? 0,
-        ensemblePoints: standings.find((entry) => entry.competitorId === "ensemble")?.points ?? 0,
-        winnerProb: predictionRecord.ensemble.winner[call.p1] ?? null,
-        p2OnPodium: positionIn(sheet.finishingOrder, call.p2) <= 3,
-        p3OnPodium: positionIn(sheet.finishingOrder, call.p3) <= 3,
-        evidenceViews: base.evidenceViews,
-      });
-      const badges = [...new Set([...base.badges, ...earned])];
-      const next: PitWallRecord = { ...base, badges };
+      if (playerScore == null) {
+        throw new ApiError("RESPONSE_INVALID", "the engine never scored the player's call");
+      }
+
+      const next = applyLockedRound(record, raceKey, call, scores, playerScore, predictionRecord);
       saveRecord(browserStorage(), next);
-      return next;
-    });
-  }, []);
+      const badgesEarned = next.badges.filter((badge) => !record.badges.includes(badge));
+      setRecord(next);
+      return { score: playerScore, badgesEarned };
+    },
+    [client, record],
+  );
 
   const setProfileName = useCallback((profileName: string) => {
     setRecord((current) => {
@@ -124,7 +180,7 @@ export default function App() {
     <div className="app-shell">
       <header className="app-header">
         <span className="app-title">Pit Wall</span>
-        <span className="app-banner">ADVISORY ONLY — PINNED DATASET 2020–2024 — NO LIVE INFERENCE</span>
+        <span className="app-banner">{advisoryBasis(config)}</span>
       </header>
       <main className="app-main">
         {route === "race" && <RacePage record={record} onLock={lockCall} onOpenEvidence={openEvidence} />}
@@ -144,9 +200,4 @@ export default function App() {
       <BottomNav active={route} onNavigate={navigate} />
     </div>
   );
-}
-
-function positionIn(finishingOrder: string[], driverId: string): number {
-  const index = finishingOrder.indexOf(driverId);
-  return index < 0 ? Number.POSITIVE_INFINITY : index + 1;
 }

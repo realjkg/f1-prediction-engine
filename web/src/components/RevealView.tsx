@@ -1,9 +1,13 @@
-import { driverName, DRIVERS } from "../fixtures/drivers";
-import { topPicks } from "../fixtures/briefs";
-import type { CallSheet } from "../fixtures/callsheets";
-import { podiumCall, type RoundScore } from "../lib/scoring";
-import type { NearMissFeedback } from "../lib/standings";
-import type { BadgeId, PredictionRecord, RaceIdentity, RoundCall } from "../types";
+import { driverCode, driverName } from "../lib/drivers";
+import { podiumCall, topPicks } from "../lib/calls";
+import type {
+  BadgeId,
+  CallScore,
+  PredictionRecord,
+  RaceIdentity,
+  RaceResultView,
+  RoundCall,
+} from "../types";
 import { ConsensusChip } from "./ConsensusChip";
 import { Confetti } from "./Confetti";
 import { ModelCard } from "./ModelCard";
@@ -11,35 +15,36 @@ import { RoundScoreCard } from "./RoundScoreCard";
 
 interface RevealViewProps {
   race: RaceIdentity;
-  /** The round's call sheet — carries the classified finishing order. */
-  sheet: CallSheet;
+  /** The prediction record the round was called against. */
   record: PredictionRecord;
+  /** The classified result — the engine's own. */
+  result: RaceResultView;
   call: RoundCall;
-  score: RoundScore;
-  streakAfter: number;
-  nearMissFeedback: NearMissFeedback | null;
+  /** The engine-computed score of this round's lock. */
+  score: CallScore;
   badgesEarned: BadgeId[];
   /** Null when every round is played — the loop closes on the picker. */
   onNextRound: (() => void) | null;
   onOpenEvidence: () => void;
 }
 
-function revealHeadline(score: RoundScore): string {
-  if (score.positionExactCount === 3) return "EXACT PODIUM";
-  if (score.winnerBonus) return "WINNER CALLED";
-  if (score.total > 0) return "ON THE BOARD";
+function revealHeadline(round: CallScore["round"]): string {
+  if (round.picks.every((pick) => pick.outcome === "EXACT")) return "EXACT PODIUM";
+  if (round.picks.some((pick) => pick.slot === "p1" && pick.outcome === "EXACT")) {
+    return "WINNER CALLED";
+  }
+  if (round.totalPoints > 0) return "ON THE BOARD";
   return "THE MACHINE SAW IT COMING";
 }
 
-function ActualPodium({ finishingOrder }: { finishingOrder: string[] }) {
-  const top = finishingOrder.slice(0, 3);
+function ActualPodium({ result }: { result: RaceResultView }) {
   return (
     <ol className="actual-podium">
-      {top.map((driverId, index) => (
+      {result.podium.map((driverId, index) => (
         <li key={driverId}>
           <span className="podium-slot">P{index + 1}</span>
           <span className="podium-driver">
-            <span className="driver-code">{DRIVERS[driverId]?.code}</span>
+            <span className="driver-code">{driverCode(driverId)}</span>
             {driverName(driverId)}
           </span>
         </li>
@@ -48,43 +53,41 @@ function ActualPodium({ finishingOrder }: { finishingOrder: string[] }) {
   );
 }
 
-/**
- * The reveal — your call vs the actual result vs every model's card, the
- * round score, and the way back into the loop. The reveal is the dopamine
- * moment: everything renders immediately, animation is CSS-only.
- */
+/** The reveal — your call vs the actual result vs every model's card. */
 export function RevealView({
   race,
-  sheet,
   record,
+  result,
   call,
   score,
-  streakAfter,
-  nearMissFeedback,
   badgesEarned,
   onNextRound,
   onOpenEvidence,
 }: RevealViewProps) {
-  // Finishing positions from the same classified order the scoring used.
   const landed: Record<string, number> = Object.fromEntries(
-    sheet.finishingOrder.map((driverId, index) => [driverId, index + 1]),
+    result.classified.map((finish) => [finish.driverId, finish.position]),
   );
+  const nearMissPick = score.round.picks.find((pick) => pick.outcome === "NEAR_MISS");
+  const ensembleCall = podiumCall(record.ensemble.podium);
+  const ensembleKnew =
+    nearMissPick != null &&
+    ensembleCall != null &&
+    [ensembleCall.p1, ensembleCall.p2, ensembleCall.p3].includes(nearMissPick.driverId);
+  const exact = score.round.picks.every((pick) => pick.outcome === "EXACT");
 
   return (
     <section className="reveal" aria-label={`Reveal for ${race.name}`}>
-      <Confetti show={score.positionExactCount === 3} />
+      <Confetti show={exact} />
       <header className="reveal-head">
         <p className="reveal-kicker">{race.name}</p>
-        <h1 className={`reveal-headline${score.positionExactCount === 3 ? " is-exact" : ""}`}>
-          {revealHeadline(score)}
-        </h1>
-        <ConsensusChip flag={record.ensemble.consensus.flag} coinFlip />
+        <h1 className={`reveal-headline${exact ? " is-exact" : ""}`}>{revealHeadline(score.round)}</h1>
+        {score.round.consensusFlag && <ConsensusChip flag={score.round.consensusFlag} coinFlip />}
         <p className="reveal-hindsight">Open replay — the models never saw this result; you may remember it.</p>
       </header>
 
       <section className="actual-result" aria-label="Actual result">
         <h2>Actual podium</h2>
-        <ActualPodium finishingOrder={sheet.finishingOrder} />
+        <ActualPodium result={result} />
       </section>
 
       <div className="reveal-cards">
@@ -114,12 +117,12 @@ export function RevealView({
         ))}
       </div>
 
-      <RoundScoreCard score={score} streakAfter={streakAfter} badgesEarned={badgesEarned} />
+      <RoundScoreCard round={score.round} streak={score.streak} badgesEarned={badgesEarned} />
 
-      {nearMissFeedback && (
+      {nearMissPick && (
         <p className="near-miss" role="status">
-          Your P{nearMissFeedback.pickedSlot} {driverName(nearMissFeedback.driverId)} finished P4
-          {nearMissFeedback.ensembleKnew
+          Your P{Number.parseInt(nearMissPick.slot.slice(1), 10)} {driverName(nearMissPick.driverId)} finished P4
+          {ensembleKnew
             ? " — the ensemble had him on its podium. It knew."
             : " — 0.8s from the podium."}
         </p>
