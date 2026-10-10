@@ -1,12 +1,15 @@
 # Reproducible Android DEBUG APK builder; iOS compilation still uses macOS/Xcode.
-FROM node:24-bookworm-slim AS android-builder
+FROM eclipse-temurin:21-jdk-noble AS android-builder
+COPY --from=node:24-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:24-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
 ARG VITE_F1E_API_BASE_URL
 ENV VITE_F1E_API_BASE_URL=${VITE_F1E_API_BASE_URL}
 ENV ANDROID_HOME=/opt/android-sdk
 ENV ANDROID_SDK_ROOT=/opt/android-sdk
 ENV PATH="${PATH}:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-17-jdk-headless ca-certificates curl unzip && \
+    ca-certificates curl unzip && \
     rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /opt/android-sdk/cmdline-tools && \
     curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
