@@ -42,7 +42,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -447,6 +447,7 @@ def fetch_round_rows(
 def fetch_season(
     client: CachingClient,
     season: int,
+    as_of: date | None = None,
 ) -> tuple[
     list[dict],
     dict[int, list[dict]],
@@ -468,7 +469,28 @@ def fetch_season(
     sprints_by_round: dict[int, list[dict]] = {}
 
     for race in schedule_races:
+        # For an in-progress season, retain the schedule but refuse to ingest
+        # outcomes from the cutoff date or later. A date-only source cannot
+        # establish that same-day results were available at forecast time.
         round_number = int(race["round"])
+        if as_of is not None and date.fromisoformat(race["date"]) >= as_of:
+            # A race can still be upcoming while qualifying or its sprint has
+            # already finished. Keep those observed pre-race facts, but never
+            # mistake them for the Grand Prix result.
+            for session_name, path_name, inner_key, target in (
+                ("Qualifying", "qualifying", "QualifyingResults", qualifying_by_round),
+                ("Sprint", "sprint", "SprintResults", sprints_by_round),
+            ):
+                session = race.get(session_name)
+                if not session or date.fromisoformat(session["date"]) >= as_of:
+                    continue
+                observed, observed_at = fetch_round_rows(
+                    client, f"{season}/{round_number}/{path_name}.json", inner_key
+                )
+                fetched_at = max(fetched_at, observed_at)
+                if observed:
+                    target[round_number] = observed
+            continue
         results_block, results_at = fetch_round_rows(
             client, f"{season}/{round_number}/results.json", "Results"
         )
@@ -514,7 +536,7 @@ def fetch_season(
 
 
 def build_table_rows(
-    seasons: list[int], client: CachingClient
+    seasons: list[int], client: CachingClient, as_of: date | None = None
 ) -> tuple[dict[str, list[dict]], list[str]]:
     """Fetch everything and parse into canonical row dicts per table."""
     races: list[dict] = []
@@ -532,7 +554,7 @@ def build_table_rows(
             qualifying_by_round,
             sprints_by_round,
             season_fetched_at,
-        ) = fetch_season(client, season)
+        ) = fetch_season(client, season, as_of=as_of)
         fetched_ats.append(season_fetched_at)
         races.extend(parse_race_rows(schedule_races))
 
@@ -771,6 +793,7 @@ def run_refresh(
     dataset_id: str,
     min_interval: float,
     budget: int,
+    as_of: date | None = None,
     fetch_fn: Callable[[str], HttpResponse] = default_fetch,
     sleep_fn: Callable[[float], None] = time.sleep,
     wall_now_fn: Callable[[], float] = time.time,
@@ -787,7 +810,7 @@ def run_refresh(
         now_fn=clock_now_fn,
     )
 
-    tables, fetched_ats = build_table_rows(seasons, client)
+    tables, fetched_ats = build_table_rows(seasons, client, as_of=as_of)
     write_parquet_tables(tables, data_dir)
 
     table_hashes = {
@@ -849,6 +872,10 @@ def main(argv: list[str] | None = None) -> int:
         "--seasons", default=DEFAULT_SEASONS, help="e.g. 2020-2024 or 2020,2021"
     )
     parser.add_argument("--data-dir", default="data/snapshot")
+    parser.add_argument(
+        "--as-of",
+        help="Exclusive YYYY-MM-DD race-result cutoff for partial seasons; race date must be earlier",
+    )
     parser.add_argument("--cache-dir", default=".cache/jolpica")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument("--dataset-id", default=DEFAULT_DATASET_ID)
@@ -859,6 +886,11 @@ def main(argv: list[str] | None = None) -> int:
     seasons = parse_seasons(args.seasons)
     data_dir = Path(args.data_dir)
     cache_dir = Path(args.cache_dir)
+    as_of = date.fromisoformat(args.as_of) if args.as_of else None
+    if max(seasons) >= 2025 and data_dir == Path("data/snapshot"):
+        parser.error("current-era seasons require --data-dir separate from the certified 2020–2024 baseline")
+    if max(seasons) >= 2026 and as_of is None:
+        parser.error("2026 refresh requires an explicit --as-of cutoff")
 
     try:
         summary = run_refresh(
@@ -869,6 +901,7 @@ def main(argv: list[str] | None = None) -> int:
             dataset_id=args.dataset_id,
             min_interval=args.min_interval,
             budget=args.budget,
+            as_of=as_of,
         )
     except BudgetExhausted as error:
         print(f"JOLPICA_BUDGET_EXHAUSTED — stopping cleanly: {error}")
