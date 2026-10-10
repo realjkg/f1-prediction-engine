@@ -59,7 +59,7 @@ def test_weather_does_not_determine_winner() -> None:
     strong = {"driver-b": profile("driver-b", wet_skill=1.0, races=80)}
     wet = conditional_winner_distribution(
         BASE, forecast(wet=1.0, mixed=0, dry=0),
-        strong, candidate_strength=1.0,
+        strong, candidate_strength=0.2,
     )
     assert wet.winner["driver-b"] > BASE["driver-b"]
     # Wet experience changes the probability without forcing a winner.
