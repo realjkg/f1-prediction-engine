@@ -23,6 +23,8 @@ CANDIDATES = (
     "logit-shrink-qual",
     "gbm-dyn-qual",
     "logit-dyn-qual",
+    "gbm-session-qual",
+    "gbm-dyn-session-qual",
 )
 RESEARCH_SEASON = 2025
 DIAGNOSTIC_SEASON = 2026
