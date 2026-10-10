@@ -32,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
             "results": [
                 asdict(evaluate_season(db, season, method=model))
                 for season in args.season
-                for model in ("form", "logit", "gbm", "logit-qual", "gbm-qual")
+                for model in ("form", "logit", "gbm", "pole", "logit-qual", "gbm-qual")
             ],
         }
     report = json.dumps(data, indent=2) + "\n"

@@ -32,6 +32,9 @@ class SeasonScore:
     mean_winner_log_loss: float
     winner_confidence_ece: float
     feature_mode: str
+    pole_winner_hit_rate: float | None
+    winner_gain_vs_pole: int | None
+    differing_winner_picks_from_pole: int | None
 
 
 def _array(samples: list[TrainingSample]) -> np.ndarray:
@@ -66,6 +69,22 @@ def _estimator(method: str):
             StandardScaler(),
             LogisticRegression(max_iter=1000, C=0.5, random_state=2026),
         )
+    if method == "logit-shrink":
+        return make_pipeline(
+            SimpleImputer(strategy="median", keep_empty_features=True),
+            StandardScaler(),
+            LogisticRegression(max_iter=1000, C=0.05, random_state=2026),
+        )
+    if method in {"gbm-shallow", "gbm-regularized"}:
+        if method == "gbm-shallow":
+            leaves, leaf, l2, iterations = 4, 24, 8.0, 55
+        else:
+            leaves, leaf, l2, iterations = 7, 35, 25.0, 55
+        return HistGradientBoostingClassifier(
+            max_iter=iterations, max_leaf_nodes=leaves,
+            min_samples_leaf=leaf, learning_rate=0.05,
+            l2_regularization=l2, random_state=2026,
+        )
     if method == "gbm":
         return HistGradientBoostingClassifier(
             max_iter=80, max_leaf_nodes=7, min_samples_leaf=12,
@@ -83,6 +102,13 @@ def _win_normalize(raw: np.ndarray) -> np.ndarray:
 def _predict(
     history: list[TrainingSample], target: list[TrainingSample], method: str
 ) -> tuple[np.ndarray, np.ndarray]:
+    if method == "pole":
+        # Immutable fixed-rank baseline, not fitted to outcome labels.
+        # The first post-qualifying feature is the observed quali position.
+        ranks = np.asarray([row.values[len(FEATURE_NAMES)] for row in target], dtype=float)
+        ranks = np.where(np.isfinite(ranks), ranks, 999.0)
+        strength = np.exp(-0.6 * np.clip(ranks - 1.0, 0.0, 100.0))
+        return _win_normalize(strength), strength
     if method == "form":
         form = np.asarray(
             [row.values[1] if row.values[1] is not None else 25 for row in target],
@@ -106,9 +132,12 @@ def evaluate_season(
     db: sqlite3.Connection, season: int, *, method: str
 ) -> SeasonScore:
     """Report honest holdout metrics; no same-round or future-race labels."""
-    if method not in {"form", "logit", "gbm", "logit-qual", "gbm-qual"}:
+    if method not in {
+        "form", "logit", "gbm", "logit-qual", "gbm-qual", "pole",
+        "gbm-shallow-qual", "gbm-regularized-qual", "logit-shrink-qual",
+    }:
         raise ValueError("unsupported method")
-    qualify = method.endswith("-qual")
+    qualify = method.endswith("-qual") or method == "pole"
     qualifying_index = qualifying_feature_index(db) if qualify else {}
     rounds = [
         row[0] for row in db.execute(
@@ -121,6 +150,8 @@ def evaluate_season(
     log_losses: list[float] = []
     top_picks: list[tuple[float, float]] = []
     top4_recalls: list[float] = []
+    pole_correct: list[int] = []
+    differing_from_pole = 0
     for round_number in rounds:
         previous = training_rows_before(db, season, round_number)
         target = _target_samples(db, season, round_number)
@@ -145,8 +176,16 @@ def evaluate_season(
         win, p_top4 = _predict(previous, target, method)
         actual_win = np.asarray([row.won for row in target])
         actual_top4 = np.asarray([row.top4 for row in target])
-        correct = float(int(np.argmax(win) == np.argmax(actual_win)))
+        picked_idx = int(np.argmax(win))
+        correct = float(int(picked_idx == np.argmax(actual_win)))
         hits.append(correct)
+        if qualify:
+            quali_positions = np.asarray(
+                [row.values[len(FEATURE_NAMES)] for row in target], dtype=float
+            )
+            pole_idx = int(np.nanargmin(quali_positions))
+            pole_correct.append(int(actual_win[pole_idx]))
+            differing_from_pole += int(picked_idx != pole_idx)
         briers.append(float(np.sum((win - actual_win) ** 2)))
         # Winner log loss is based on the entire race distribution, not 20
         # independent Bernoulli claims. A tiny clip keeps it finite.
@@ -184,4 +223,10 @@ def evaluate_season(
         winner_confidence_ece=calibration_error,
         feature_mode="post-qualifying replay; source publication timestamp unverified"
         if qualify else "prior-round historical",
+        pole_winner_hit_rate=sum(pole_correct) / len(pole_correct)
+        if pole_correct else None,
+        winner_gain_vs_pole=int(sum(hits) - sum(pole_correct))
+        if pole_correct else None,
+        differing_winner_picks_from_pole=differing_from_pole
+        if pole_correct else None,
     )
