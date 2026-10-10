@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 from f1engine.driver_dynamics import _classified
@@ -21,7 +21,7 @@ ALLOWED_OBSERVED_SOURCE = "openf1"
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("weather timestamps must include a timezone")
-    return value.astimezone(timezone.utc)
+    return value.astimezone(UTC)
 
 
 def _trusted_source(source: str) -> None:
