@@ -1,0 +1,61 @@
+name: Fall 2026 Data Qualification
+
+on:
+  pull_request:
+    paths:
+      - "scripts/refresh-data.py"
+      - "scripts/demo.py"
+      - "engine/f1engine/ingestion.py"
+      - ".github/workflows/fall-2026-qualification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  current-season:
+    name: Verify actual 2026 season source and backtest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: engine
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      - name: Install pinned engine dependencies
+        run: python3 -m pip install --require-hashes -r engine/requirements.lock.txt
+      - name: Refresh completed 2020-2026 events only
+        run: |
+          python3 scripts/refresh-data.py \
+            --seasons 2020-2026 \
+            --as-of 2026-10-10 \
+            --fresh-seasons 2026 \
+            --dataset-id 2026.10.10-fall \
+            --data-dir data/snapshot-fall-2026
+      - name: Verify 2026 completeness, timing and real venue
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from f1engine.ingestion import load_snapshot
+          data = load_snapshot(Path("data/snapshot-fall-2026"))
+          rounds = sorted((r for r in data.races if r.season == 2026), key=lambda r: r.round)
+          assert data.provenance.snapshot.asOfDate == "2026-10-10"
+          assert all(r.date < "2026-10-10" for r in rounds)
+          assert len(rounds) == 16, f"Expected 16 completed 2026 rounds, got {len(rounds)}"
+          bahrain = [r for r in rounds if "bahrain" in r.name.lower()]
+          assert len(bahrain) == 1, f"Bahrain event missing or duplicated: {bahrain}"
+          print("2026 Bahrain venue from Jolpica:", bahrain[0].circuit_id, bahrain[0].circuit_name)
+          assert "sepang" in (bahrain[0].circuit_id + " " + bahrain[0].circuit_name).lower(), (
+              "Upstream venue does not match 2026 Bahrain GP at Sepang: "
+              + bahrain[0].circuit_name
+          )
+          print("Verified 2026 rounds:", len(rounds), "through", rounds[-1].date)
+          print("Dataset:", data.dataset_id, data.dataset_sha256)
+          PY
+      - name: Run 2026 retrospective model evaluation
+        run: |
+          python3 scripts/demo.py \
+            --data-dir data/snapshot-fall-2026 \
+            --season 2026 --no-serve --no-brief
