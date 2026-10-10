@@ -78,9 +78,9 @@ jobs:
       - name: Install pip-audit (version-pinned)
         run: python3 -m pip install -q pip-audit==2.10.1
       - name: pip-audit engine runtime lock
-        run: python3 -m pip-audit -r engine/requirements.lock.txt --strict
+        run: python3 -m pip_audit -r engine/requirements.lock.txt --strict
       - name: pip-audit engine dev lock
-        run: python3 -m pip-audit -r engine/requirements-dev.lock.txt --strict
+        run: python3 -m pip_audit -r engine/requirements-dev.lock.txt --strict
       - name: npm audit web production chain (blocking)
         working-directory: web
         run: npm audit --omit=dev --audit-level=high
