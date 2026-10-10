@@ -1,4 +1,4 @@
-export const ROUTES = ["race", "models", "evidence", "observability", "settings"] as const;
+export const ROUTES = ["race", "models", "evidence", "brief", "observability", "settings"] as const;
 
 export type Route = (typeof ROUTES)[number];
 
@@ -6,6 +6,7 @@ export const ROUTE_LABELS: Record<Route, string> = {
   race: "Race",
   models: "Models",
   evidence: "Evidence",
+  brief: "Brief",
   observability: "Observability",
   settings: "Settings",
 };
