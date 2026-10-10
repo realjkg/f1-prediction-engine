@@ -472,9 +472,25 @@ def fetch_season(
         # For an in-progress season, retain the schedule but refuse to ingest
         # outcomes from the cutoff date or later. A date-only source cannot
         # establish that same-day results were available at forecast time.
-        if as_of is not None and date.fromisoformat(race["date"]) >= as_of:
-            continue
         round_number = int(race["round"])
+        if as_of is not None and date.fromisoformat(race["date"]) >= as_of:
+            # A race can still be upcoming while qualifying or its sprint has
+            # already finished. Keep those observed pre-race facts, but never
+            # mistake them for the Grand Prix result.
+            for session_name, path_name, inner_key, target in (
+                ("Qualifying", "qualifying", "QualifyingResults", qualifying_by_round),
+                ("Sprint", "sprint", "SprintResults", sprints_by_round),
+            ):
+                session = race.get(session_name)
+                if not session or date.fromisoformat(session["date"]) >= as_of:
+                    continue
+                observed, observed_at = fetch_round_rows(
+                    client, f"{season}/{round_number}/{path_name}.json", inner_key
+                )
+                fetched_at = max(fetched_at, observed_at)
+                if observed:
+                    target[round_number] = observed
+            continue
         results_block, results_at = fetch_round_rows(
             client, f"{season}/{round_number}/results.json", "Results"
         )
