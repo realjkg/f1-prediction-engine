@@ -3,7 +3,10 @@
 The engine's HTTP surface is a READ surface (spec: "Two runtimes, one evidence
 contract"): every endpoint serves the pinned snapshot or the evidence ledger,
 and none of them recompute predictions — training, ensembling, and ledger
-writes belong to the engine tasks and the demo scenario. Response schemas
+writes belong to the engine tasks and the demo scenario. The game-scoring
+endpoint computes points, not predictions: the scoring module's pure
+arithmetic over the ledger's stored verdict and the snapshot's classified
+results — no model inference on the request path. Response schemas
 reuse the engine's wire models directly (``PredictionRecord``,
 ``ModelPrediction``, ``EnsembleVerdict``), so the API cannot drift from the
 prediction-record contract the ledger writes: ``advisoryOnly`` and
@@ -22,6 +25,9 @@ Failure discipline at the boundary:
   error: the store is simply empty until the demo scenario writes records.
 - Unknown races 404 with a typed code: ``RACE_UNKNOWN`` (race not in the
   snapshot) or ``PREDICTIONS_NOT_FOUND`` (race known, no records yet).
+- Game-scoring refusals are typed too: a race with no classified result 404s
+  with ``RESULT_NOT_FOUND``, and a call that is not three distinct snapshot
+  drivers 422s with ``CALL_MALFORMED``.
 
 Observability boundary: ``/api/events`` and ``/metrics`` are READS. The event
 bus and the engine's metric series are the observability task's domain; this
@@ -45,6 +51,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from f1engine.backtest import ClassifiedResult, classify_round
 from f1engine.ensemble import PODIUM_SPREAD_OK_THRESHOLD
 from f1engine.evidence import (
     EvidenceError,
@@ -54,6 +61,7 @@ from f1engine.evidence import (
 )
 from f1engine.ingestion import PinnedDataset, load_snapshot
 from f1engine.observability import EventStatus, Signal
+from f1engine.scoring import CallScore, PitCall, score_call_sheet
 from f1engine.wire import WireModel
 
 APP_TITLE = "F1 Prediction Engine"
@@ -125,6 +133,31 @@ class RaceSummary(WireModel):
 class RacesView(WireModel):
     races: list[RaceSummary]
     total: int
+
+
+class ClassifiedFinish(WireModel):
+    """One classified finishing position — position-ascending on the result."""
+
+    position: int
+    driver_id: str
+
+
+class RaceResultView(WireModel):
+    """A round's classified result — the reveal's actual column.
+
+    ``podium`` is the backtest's podium@3 actual (first three classified;
+    shorter when fewer finished) and ``classified`` is the full classified
+    order, so the reveal can name the P4 heartbreak.
+    """
+
+    race_id: str
+    season: int
+    round: int
+    name: str
+    date: str
+    winner: str
+    podium: list[str]
+    classified: list[ClassifiedFinish]
 
 
 class PredictionsView(WireModel):
@@ -253,6 +286,10 @@ class RaceCatalog:
 
     def knows(self, race_id: str) -> bool:
         return race_id in self._known_race_ids
+
+    def race(self, race_id: str) -> RaceSummary | None:
+        """One race by id, or None when the snapshot does not know it."""
+        return next((race for race in self._races if race.race_id == race_id), None)
 
 
 class LedgerStore:
@@ -429,6 +466,45 @@ def _error(status_code: int, code: str, message: str) -> HTTPException:
     )
 
 
+def _classified_result(dataset: PinnedDataset, race_id: str) -> ClassifiedResult | None:
+    """Classify one race's results with the backtest's shared classifier."""
+    entries = [
+        (row.position, row.driver_id)
+        for row in dataset.results
+        if row.race_id == race_id
+    ]
+    return classify_round(entries)
+
+
+def _parse_call(raw: str | None, dataset: PinnedDataset) -> PitCall:
+    """Parse 'P1,P2,P3' into a PitCall — typed 422 on any malformed call.
+
+    A call must name three distinct drivers from the snapshot's drivers
+    table. A known driver who did not race this round is a wrong call —
+    scored as a MISS, not refused.
+    """
+    picks = [part.strip() for part in raw.split(",")] if raw and raw.strip() else []
+    if len(picks) != 3 or any(not pick for pick in picks):
+        raise _error(
+            422,
+            "CALL_MALFORMED",
+            f"call must be exactly three driver ids 'P1,P2,P3', got {raw!r}",
+        )
+    if len(set(picks)) != 3:
+        raise _error(
+            422, "CALL_MALFORMED", f"call must name three distinct drivers, got {raw!r}"
+        )
+    known = {driver.driver_id for driver in dataset.drivers}
+    unknown = sorted(set(picks) - known)
+    if unknown:
+        raise _error(
+            422,
+            "CALL_MALFORMED",
+            f"call names drivers not in the pinned snapshot: {unknown}",
+        )
+    return PitCall(p1=picks[0], p2=picks[1], p3=picks[2])
+
+
 def create_app(
     settings: ApiSettings | None = None,
     *,
@@ -503,6 +579,76 @@ def create_app(
                 f"no prediction records for {race_id!r} in the ledger",
             )
         return PredictionsView(predictions=records, total=len(records))
+
+    @app.get("/api/races/{race_id}/result")
+    def race_result(race_id: str) -> RaceResultView:
+        """A round's classified result — podium first, full order behind it."""
+        race = catalog.race(race_id)
+        if race is None:
+            raise _error(
+                404, "RACE_UNKNOWN", f"no race {race_id!r} in the pinned snapshot"
+            )
+        result = _classified_result(loaded, race_id)
+        if result is None:
+            raise _error(
+                404,
+                "RESULT_NOT_FOUND",
+                f"no classified result for {race_id!r} in the snapshot",
+            )
+        return RaceResultView(
+            race_id=race_id,
+            season=race.season,
+            round=race.round,
+            name=race.name,
+            date=race.date,
+            winner=result.winner,
+            podium=list(result.podium),
+            classified=[
+                ClassifiedFinish(position=position, driver_id=driver_id)
+                for position, driver_id in enumerate(result.classified, start=1)
+            ],
+        )
+
+    @app.get("/api/races/{race_id}/score")
+    def race_score(
+        race_id: str,
+        call: Annotated[str | None, Query()] = None,
+        streak_before: Annotated[int, Query(ge=0)] = 0,
+    ) -> CallScore:
+        """Score one locked call — the client never invents scores.
+
+        Stateless by design: the pit-wall record (prior streak) lives
+        client-side, so the caller passes ``streak_before`` and the engine
+        folds it with the pure streak math. The round's consensus flag comes
+        from the ledger's latest prediction record — never from the caller,
+        never recomputed — so a round with no prediction record has no
+        ensemble verdict to double on and is refused (PREDICTIONS_NOT_FOUND).
+        """
+        race = catalog.race(race_id)
+        if race is None:
+            raise _error(
+                404, "RACE_UNKNOWN", f"no race {race_id!r} in the pinned snapshot"
+            )
+        result = _classified_result(loaded, race_id)
+        if result is None:
+            raise _error(
+                404,
+                "RESULT_NOT_FOUND",
+                f"no classified result for {race_id!r} in the snapshot",
+            )
+        try:
+            records = ledger.records_for_race(race_id)
+        except EvidenceError as error:
+            raise _error(503, error.code, str(error)) from error
+        if not records:
+            raise _error(
+                404,
+                "PREDICTIONS_NOT_FOUND",
+                f"no prediction record for {race_id!r} — no ensemble verdict, "
+                "so no consensus flag to score against",
+            )
+        flag = records[-1].ensemble.consensus.flag  # latest append; verdicts are deterministic
+        return score_call_sheet(_parse_call(call, loaded), result, flag, streak_before)
 
     @app.get("/api/models")
     def model_metadata() -> ModelsView:
