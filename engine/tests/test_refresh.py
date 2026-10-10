@@ -10,6 +10,7 @@ Jolpica fetch function.
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -158,3 +159,51 @@ def test_persistent_429_raises_rate_limited(refresh, tmp_path: Path) -> None:
 
     # No Retry-After hint: doubling backoff 2s, 4s across the 3 attempts.
     assert sleeps == [2.0, 4.0]
+
+
+def test_as_of_excludes_same_day_and_future_rounds(refresh, tmp_path: Path) -> None:
+    """A pre-race cutoff must not fetch or train on the current event."""
+    fake = make_fake_jolpica(refresh)
+    summary = refresh.run_refresh(
+        seasons=[2021],
+        data_dir=tmp_path / "data",
+        cache_dir=tmp_path / "cache",
+        base_url=BASE_URL,
+        dataset_id="2026.10.10-test",
+        min_interval=0.0,
+        budget=500,
+        fetch_fn=fake.fetch_fn,
+        sleep_fn=lambda _seconds: None,
+        as_of=date(2021, 5, 30),  # round 2 race date: same-day results excluded
+    )
+    assert summary["requestsMade"] == 4  # schedule + round 1 result, grid, sprint
+    assert not any("/2021/2/" in url for url in fake.request_urls)
+    dataset = load_snapshot(tmp_path / "data")
+    assert [(race.season, race.round) for race in dataset.races] == [(2021, 1)]
+    assert dataset.provenance.snapshot.asOfDate == "2021-05-30"
+    assert "strictly before 2021-05-30" in dataset.limitations[-1]
+
+
+def test_current_season_revalidates_cache(refresh, tmp_path: Path) -> None:
+    """Live-season refresh must not silently reuse stale API responses."""
+    fake = make_fake_jolpica(refresh)
+    options = dict(
+        seasons=[2021],
+        data_dir=tmp_path / "data",
+        cache_dir=tmp_path / "cache",
+        base_url=BASE_URL,
+        dataset_id="2026.10.10-test",
+        min_interval=0.0,
+        budget=500,
+        fetch_fn=fake.fetch_fn,
+        sleep_fn=lambda _seconds: None,
+        as_of=date(2021, 6, 1),
+        fresh_seasons={2021},
+    )
+    first = refresh.run_refresh(**options)
+    fake.request_urls.clear()
+    second = refresh.run_refresh(**options)
+    assert first["requestsMade"] == 6
+    assert second["requestsMade"] == 6
+    assert len(fake.request_urls) == 6
+    assert first["datasetSha256"] == second["datasetSha256"]
