@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from f1engine.backtest import run_backtest
+from f1engine.evidence import SkippedRound
 from f1engine.training_store import ImmutableRecordConflict, TrainingStore
 
 
@@ -75,7 +76,17 @@ def test_probabilities_keep_distinct_model_revisions(
         second = store.inventory()
         assert second["model_runs"] == 2
         assert second["probabilities"] == 2 * first["probabilities"]
-        altered = replace(backtest, rounds=())
+        # Preserve scoreable rounds; change only the stored skipped-round count.
+        altered = replace(
+            backtest,
+            skipped=backtest.skipped + (
+                SkippedRound(
+                    season=2021, round=99,
+                    code="TRAINING_DATA_INSUFFICIENT",
+                    message="synthetic revision-conflict probe",
+                ),
+            ),
+        )
         with pytest.raises(ImmutableRecordConflict, match="model_runs"):
             store.record_backtest(predictable_dataset, altered, "baseline-v1")
 
