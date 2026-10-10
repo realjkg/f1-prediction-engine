@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -16,7 +16,7 @@ from f1engine.condition_interaction import (
 
 H = "a" * 64
 P = "b" * 64
-START = datetime(2026, 10, 11, 13, 0, tzinfo=timezone.utc)
+START = datetime(2026, 10, 11, 13, 0, tzinfo=UTC)
 CUTOFF = START - timedelta(hours=2)
 BASE = {"driver-a": 0.50, "driver-b": 0.30, "driver-c": 0.20}
 
