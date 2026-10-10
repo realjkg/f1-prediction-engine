@@ -1,0 +1,271 @@
+/**
+ * TypeScript mirrors of the engine's wire schemas — the API contract the UI
+ * consumes. Field names follow the engine's camelCase wire convention
+ * (engine/f1engine/wire.py `to_camel`); shapes mirror:
+ *
+ * - PredictionRecord / RaceIdentity / DatasetIdentity — engine/f1engine/evidence.py
+ * - ModelPrediction / ModelDiagnostics                — engine/f1engine/models.py
+ * - EnsembleVerdict / Consensus                      — engine/f1engine/ensemble.py
+ * - RaceSummary / RacesView / ModelsView / EvidencePage /
+ *   ConfigView                                        — engine/f1engine/app.py
+ * - RaceBrief / BriefContent / RaceDigest            — engine/f1engine/brief.py
+ *
+ * These are the shapes PR #6's FastAPI surface serves (FastAPI serializes
+ * response models by alias, so the wire is camelCase — engine/tests/test_api.py
+ * asserts `record["advisoryOnly"]`). The UI task consumes them as typed
+ * fixtures; live wiring replaces the fixture import without touching types.
+ */
+
+/** Model roster ids — closed set, mirrors models.MODEL_IDS + the ensemble key. */
+export type ModelId = "m1-gbm" | "m2-logit" | "m3-form";
+
+/** Any scored competitor on the Model Gauntlet: the player, a model, or the ensemble. */
+export type CompetitorId = "you" | ModelId | "ensemble";
+
+export type ConsensusFlag = "OK" | "LOW_CONSENSUS";
+
+/** engine/f1engine/evidence.py RaceIdentity */
+export interface RaceIdentity {
+  season: number;
+  round: number;
+  raceId: string;
+  name: string;
+}
+
+/** engine/f1engine/evidence.py DatasetIdentity */
+export interface DatasetIdentity {
+  id: string;
+  sha256: string;
+}
+
+/** engine/f1engine/models.py ModelDiagnostics */
+export interface ModelDiagnostics {
+  trainedThroughSeason: number;
+  trainedThroughRound: number;
+  featuresUsed: string[];
+  /** null: the model has no stochastic component. */
+  seed: number | null;
+}
+
+/** driver_id -> probability, exactly as the wire carries it. */
+export type ProbabilityMap = Record<string, number>;
+
+/** engine/f1engine/models.py ModelPrediction */
+export interface ModelPrediction {
+  raceId: string;
+  modelId: ModelId;
+  /** driver_id -> P(win); sums to 1 per model (engine validator). */
+  winner: ProbabilityMap;
+  /** driver_id -> P(top 3). */
+  podium: ProbabilityMap;
+  /** Snapshot provenance time — input-derived, never wall-clock. */
+  generatedAt: string;
+  datasetDigest: string;
+  diagnostics: ModelDiagnostics;
+}
+
+/** engine/f1engine/ensemble.py Consensus */
+export interface Consensus {
+  podiumSpread: number;
+  flag: ConsensusFlag;
+}
+
+/** engine/f1engine/ensemble.py EnsembleVerdict */
+export interface EnsembleVerdict {
+  raceId: string;
+  winner: ProbabilityMap;
+  podium: ProbabilityMap;
+  consensus: Consensus;
+  /** Normalized weights actually applied. */
+  weightsUsed: Record<ModelId, number>;
+}
+
+/** engine/f1engine/evidence.py PredictionRecord — the shared contract. */
+export interface PredictionRecord {
+  schemaVersion: 1;
+  recordType: "prediction";
+  predictionId: string;
+  race: RaceIdentity;
+  generatedAt: string;
+  dataset: DatasetIdentity;
+  evidenceBasis: string;
+  models: Record<ModelId, ModelPrediction>;
+  ensemble: EnsembleVerdict;
+  advisoryOnly: true;
+  dataLimitations: string[];
+  prevRecordSha256: string | null;
+  recordSha256: string;
+}
+
+/** engine/f1engine/app.py RaceSummary — the Race screen's picker rows. */
+export interface RaceSummary {
+  season: number;
+  round: number;
+  raceId: string;
+  name: string;
+  date: string;
+  /** Result rows for this round exist in the snapshot. */
+  completed: boolean;
+}
+
+/** engine/f1engine/app.py RacesView */
+export interface RacesView {
+  races: RaceSummary[];
+  total: number;
+}
+
+/** engine/f1engine/app.py ModelInfo */
+export interface ModelInfo {
+  modelId: string;
+  method: string;
+  role: string;
+  /** The ensemble entry only. */
+  consensusThreshold: number | null;
+}
+
+/** engine/f1engine/app.py ModelsView */
+export interface ModelsView {
+  models: ModelInfo[];
+}
+
+/** engine/f1engine/app.py EvidencePage */
+export interface EvidencePageView {
+  records: PredictionRecord[];
+  total: number;
+  offset: number;
+  limit: number;
+  /** Always true in a served page — a failed page is a 503. */
+  chainValid: boolean;
+}
+
+/** engine/f1engine/app.py ConfigView — the Settings screen's operating contract. */
+export interface ConfigView {
+  engineVersion: string;
+  datasetVersion: string;
+  advisoryOnly: boolean;
+  advisoryNotice: string;
+  consensusThreshold: number;
+  briefMode: "fixture" | "live";
+}
+
+/** engine/f1engine/brief.py DigestPick */
+export interface DigestPick {
+  driverId: string;
+  probability: number;
+}
+
+/** engine/f1engine/brief.py ModelDigestSummary */
+export interface ModelDigestSummary {
+  modelId: ModelId;
+  winnerPick: DigestPick;
+  winnerTop: DigestPick[];
+  podiumTop: DigestPick[];
+  predictionSha256: string;
+  trainedThroughSeason: number;
+  trainedThroughRound: number;
+  seed: number | null;
+}
+
+/** engine/f1engine/brief.py QualifyingLine — grid position, never a finish. */
+export interface QualifyingLine {
+  driverId: string;
+  position: number | null;
+  qBestMs: number | null;
+  deltaPoleMs: number | null;
+}
+
+/** engine/f1engine/brief.py RaceDigest */
+export interface RaceDigest {
+  predictionId: string;
+  race: RaceIdentity;
+  dataset: DatasetIdentity;
+  recordSha256: string;
+  ensembleWinnerTop: DigestPick[];
+  ensemblePodiumTop: DigestPick[];
+  consensus: Consensus;
+  models: ModelDigestSummary[];
+  qualifying: QualifyingLine[];
+}
+
+/** engine/f1engine/brief.py BriefContent */
+export interface BriefContent {
+  headline: string;
+  summary: string;
+  talkingPoints: string[];
+  consensusNote: string;
+}
+
+/** engine/f1engine/brief.py BriefPins — live only. */
+export interface BriefPins {
+  datasetDigest: string;
+  recordSha256: string;
+  modelDigests: Record<ModelId, string>;
+  ollamaModel: string;
+  ollamaModelDigest: string;
+}
+
+/** engine/f1engine/brief.py RaceBrief — advisory, outside the evidence chain. */
+export interface RaceBrief {
+  schemaVersion: 1;
+  briefType: "race-brief";
+  predictionId: string;
+  mode: "fixture" | "live";
+  evidenceBasis: string;
+  race: RaceIdentity;
+  dataset: DatasetIdentity;
+  digest: RaceDigest;
+  content: BriefContent;
+  pins: BriefPins | null;
+  advisoryOnly: true;
+}
+
+/** engine/f1engine/backtest.py BacktestMetrics — the Gauntlet's metric semantics. */
+export interface BacktestMetrics {
+  rounds: number;
+  winnerHitRate: number;
+  podium3HitRate: number;
+  meanBrier: number;
+}
+
+/**
+ * Pit Wall game state — client-owned, localStorage-backed (design doc §7,
+ * no accounts in Milestone 1). Not an engine wire type.
+ */
+
+/** The player's locked podium call, by driver id. Scoring mirrors lib/scoring. */
+export interface RoundCall {
+  p1: string;
+  p2: string;
+  p3: string;
+  /** ISO instant of the lock — reveal-card provenance, optional in tests. */
+  lockedAt?: string;
+  /**
+   * The dataset digest the call was made against — the same identity binding
+   * the ledger uses (design doc §2, "written with the round's dataset digest").
+   */
+  datasetDigest?: string;
+}
+
+/** The six ship badges (design doc §5) — closed set. */
+export type BadgeId =
+  | "first-exact-podium"
+  | "three-in-a-row"
+  | "beat-the-ensemble"
+  | "cold-read"
+  | "data-nerd"
+  | "perfect-round";
+
+/** The pit-wall record: the player's local game state. */
+export interface PitWallRecord {
+  profileName: string;
+  /** Locked calls by globally unique raceId — the localStorage identity binding. */
+  calls: Record<string, RoundCall>;
+  /** Consecutive rounds with at least one position-exact pick (flame at 3). */
+  streak: number;
+  bestStreak: number;
+  badges: BadgeId[];
+  /** Fresh Eyes: hide rounds already played (design doc §7). */
+  freshEyes: boolean;
+  /** Evidence Room opens — the Data Nerd badge counter. */
+  evidenceViews: number;
+}
