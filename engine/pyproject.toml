@@ -13,7 +13,7 @@ dependencies = [
     "pydantic>=2.9,<3",
     "pyarrow>=18,<25",
     "pyyaml>=6,<7",
-    "scikit-learn>=1.7,<1.8",
+    "scikit-learn>=1.7,<1.10",
     "uvicorn>=0.32,<1",
 ]
 
