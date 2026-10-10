@@ -1,0 +1,17 @@
+version: 2
+updates:
+  # Engine dependencies (PEP 621 pyproject.toml + hashed requirement locks).
+  - package-ecosystem: pip
+    directory: /engine
+    schedule:
+      interval: weekly
+  # Web app dependencies (npm).
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+  # CI workflow actions.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

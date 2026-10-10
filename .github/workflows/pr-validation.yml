@@ -23,8 +23,13 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.12"
-      - name: Install engine
-        run: python3 -m pip install -e "engine[dev]"
+      - name: Install engine from lock (hash-verified)
+        # Locks are the source of truth (pip-compile --generate-hashes); CI never
+        # re-resolves ranges, so builds are reproducible and pip-audit results are
+        # authoritative for the exact installed set.
+        run: |
+          python3 -m pip install --require-hashes -r engine/requirements-dev.lock.txt
+          python3 -m pip install --require-hashes -r engine/requirements.lock.txt
       - name: Test (pytest)
         run: python3 -m pytest engine/tests -q
       - name: Lint (ruff)
@@ -55,3 +60,30 @@ jobs:
         run: |
           npm run build
           npx cap sync
+
+  dependency-audit:
+    name: Dependency audit — pip-audit + npm audit
+    runs-on: ubuntu-latest
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      # actions/setup-python v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      # actions/setup-node v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "20"
+      - name: Install pip-audit (version-pinned)
+        run: python3 -m pip install -q pip-audit==2.10.1
+      - name: pip-audit engine runtime lock
+        run: python3 -m pip_audit -r engine/requirements.lock.txt --strict
+      - name: pip-audit engine dev lock
+        run: python3 -m pip_audit -r engine/requirements-dev.lock.txt --strict
+      - name: npm audit web production chain (blocking)
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high
+      - name: npm audit web dev chain (warn only)
+        working-directory: web
+        run: npm audit --audit-level=critical || echo "::warning::dev-chain npm advisory — fix it or add an allowlist entry with a recorded reason"
