@@ -21,6 +21,8 @@ CANDIDATES = (
     "gbm-shallow-qual",
     "gbm-regularized-qual",
     "logit-shrink-qual",
+    "gbm-dyn-qual",
+    "logit-dyn-qual",
 )
 RESEARCH_SEASON = 2025
 DIAGNOSTIC_SEASON = 2026
