@@ -89,6 +89,11 @@ class WeatherReliability:
     driver_condition_modifier: float | None
     wet_experience_weight: float
     dry_experience_weight: float
+    driver_baseline_positions_gained: float | None
+    wet_positions_gained: float | None
+    dry_positions_gained: float | None
+    forecast_positions_gained_modifier: float | None
+    forecast_weighted_positions_gained: float | None
 
 
 def prior_weather_reliability(
@@ -125,18 +130,32 @@ def prior_weather_reliability(
         conditions[key] = observation.observed_rain
 
     grouped: dict[bool, list[float]] = {True: [], False: []}
+    gained: dict[bool, list[float]] = {True: [], False: []}
     all_prior: list[float] = []
-    for season, round_number, status in db.execute(
-        "SELECT season, round, status FROM results WHERE driver_id=? "
-        "AND (season < ? OR (season=? AND round < ?)) "
-        "ORDER BY season, round",
+    all_gained: list[float] = []
+    for season, round_number, status, finish, qualified in db.execute(
+        "SELECT r.season, r.round, r.status, r.position, q.position "
+        "FROM results r LEFT JOIN qualifying q "
+        "ON r.season=q.season AND r.round=q.round "
+        "AND r.driver_id=q.driver_id "
+        "WHERE r.driver_id=? "
+        "AND (r.season < ? OR (r.season=? AND r.round < ?)) "
+        "ORDER BY r.season, r.round",
         (driver_id, forecast.season, forecast.season, forecast.round),
     ):
         finished = float(_classified(status))
         all_prior.append(finished)
         condition = conditions.get((season, round_number))
+        gain = (
+            float(qualified - finish)
+            if finished and finish is not None and qualified is not None else None
+        )
+        if gain is not None:
+            all_gained.append(gain)
         if condition is not None:
             grouped[condition].append(finished)
+            if gain is not None:
+                gained[condition].append(gain)
     wet, dry = grouped[True], grouped[False]
     wet_mean = sum(wet) / len(wet) if len(wet) >= minimum_per_condition else None
     dry_mean = sum(dry) / len(dry) if len(dry) >= minimum_per_condition else None
@@ -153,6 +172,30 @@ def prior_weather_reliability(
         else None
     )
     adjusted = baseline + modifier if modifier is not None else None
+    # Positions gained is relative to *that driver's own* normal racecraft,
+    # not a predicted winner. Wet-condition experience changes the direction
+    # and magnitude of this modifier only when comparable samples exist.
+    baseline_gain = sum(all_gained) / len(all_gained) if all_gained else None
+    wet_gains = gained[True]
+    dry_gains = gained[False]
+    wet_gain = (
+        sum(wet_gains) / len(wet_gains)
+        if len(wet_gains) >= minimum_per_condition else None
+    )
+    dry_gain = (
+        sum(dry_gains) / len(dry_gains)
+        if len(dry_gains) >= minimum_per_condition else None
+    )
+    gain_modifier = (
+        forecast.rain_probability * wet_weight * (wet_gain - baseline_gain)
+        + (1.0 - forecast.rain_probability) * dry_weight
+        * (dry_gain - baseline_gain)
+        if wet_gain is not None and dry_gain is not None
+        and baseline_gain is not None else None
+    )
+    adjusted_gain = (
+        baseline_gain + gain_modifier if gain_modifier is not None else None
+    )
     return WeatherReliability(
         wet_prior_races=len(wet), dry_prior_races=len(dry),
         wet_classification_rate=wet_mean,
@@ -162,4 +205,9 @@ def prior_weather_reliability(
         driver_condition_modifier=modifier,
         wet_experience_weight=wet_weight,
         dry_experience_weight=dry_weight,
+        driver_baseline_positions_gained=baseline_gain,
+        wet_positions_gained=wet_gain,
+        dry_positions_gained=dry_gain,
+        forecast_positions_gained_modifier=gain_modifier,
+        forecast_weighted_positions_gained=adjusted_gain,
     )
