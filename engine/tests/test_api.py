@@ -28,15 +28,11 @@ from f1engine.app import (
     EventView,
     create_app,
 )
-from f1engine.ensemble import PODIUM_SPREAD_OK_THRESHOLD, arbitrate
-from f1engine.evidence import append_record, build_prediction_record
-from f1engine.features import build_asof_features
-from f1engine.ingestion import PinnedDataset, SnapshotVersionMismatch, load_snapshot
-from f1engine.models import create_models
+from f1engine.ensemble import PODIUM_SPREAD_OK_THRESHOLD
+from f1engine.ingestion import PinnedDataset, SnapshotVersionMismatch
 from f1engine.observability import EventStatus, Signal
 
 EVIDENCE_BASIS = "REAL MODELS — PINNED DATASET 2020–2024 — NO LIVE INFERENCE"
-WEIGHTS = {"m1-gbm": 1.0, "m2-logit": 1.0, "m3-form": 1.0}
 EVENT_TIME = "2026-10-09T12:00:00Z"
 
 # Label values may themselves contain braces (a route template like
@@ -49,42 +45,6 @@ _PROMETHEUS_SAMPLE = re.compile(
 # ---------------------------------------------------------------------------
 # Fixtures and helpers — records built through the real pipeline.
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def predictable_dataset(predictable_snapshot: Path) -> PinnedDataset:
-    return load_snapshot(predictable_snapshot)
-
-
-@pytest.fixture()
-def ledger_factory(
-    predictable_dataset: PinnedDataset, tmp_path: Path
-) -> Callable[..., Path]:
-    """Build a real ledger by appending pipeline records for the given rounds."""
-
-    def build(*rounds: int) -> Path:
-        table = build_asof_features(predictable_dataset)
-        models = create_models()
-        for round_number in rounds:
-            predictions = []
-            for model in models.values():
-                model.train(predictable_dataset, table, (2021, round_number))
-                predictions.append(model.predict(2021, round_number))
-            verdict = arbitrate(predictions, WEIGHTS)
-            race = next(
-                row
-                for row in predictable_dataset.races
-                if row.season == 2021 and row.round == round_number
-            )
-            append_record(
-                tmp_path / "ledger.jsonl",
-                build_prediction_record(
-                    predictions, verdict, predictable_dataset, race, EVIDENCE_BASIS
-                ),
-            )
-        return tmp_path / "ledger.jsonl"
-
-    return build
 
 
 def _client(

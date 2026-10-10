@@ -18,12 +18,19 @@ from types import ModuleType
 
 import pytest
 
+from f1engine.ensemble import arbitrate
+from f1engine.evidence import append_record, build_prediction_record
+from f1engine.features import build_asof_features
 from f1engine.ingestion import PinnedDataset, load_snapshot
+from f1engine.models import create_models
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "refresh-data.py"
 DEMO_SCRIPT_PATH = REPO_ROOT / "scripts" / "demo.py"
 REPO_SNAPSHOT = REPO_ROOT / "data" / "snapshot"
+
+EVIDENCE_BASIS = "REAL MODELS — PINNED DATASET 2020–2024 — NO LIVE INFERENCE"
+WEIGHTS: dict[str, float] = {"m1-gbm": 1.0, "m2-logit": 1.0, "m3-form": 1.0}
 
 
 def _load_refresh_module() -> ModuleType:
@@ -326,6 +333,43 @@ def predictable_snapshot(
     return mini_snapshot_factory(
         tmp_path / "predictable", tmp_path / "cache", rounds=5
     )
+
+
+@pytest.fixture()
+def predictable_dataset(predictable_snapshot: Path) -> PinnedDataset:
+    return load_snapshot(predictable_snapshot)
+
+
+@pytest.fixture()
+def ledger_factory(
+    predictable_dataset: PinnedDataset, tmp_path: Path
+) -> Callable[..., Path]:
+    """Build a real ledger by appending pipeline records for the given rounds."""
+
+    def build(*rounds: int) -> Path:
+        ledger_path = tmp_path / "ledger.jsonl"
+        table = build_asof_features(predictable_dataset)
+        models = create_models()
+        for round_number in rounds:
+            predictions = []
+            for model in models.values():
+                model.train(predictable_dataset, table, (2021, round_number))
+                predictions.append(model.predict(2021, round_number))
+            verdict = arbitrate(predictions, WEIGHTS)
+            race = next(
+                row
+                for row in predictable_dataset.races
+                if row.season == 2021 and row.round == round_number
+            )
+            append_record(
+                ledger_path,
+                build_prediction_record(
+                    predictions, verdict, predictable_dataset, race, EVIDENCE_BASIS
+                ),
+            )
+        return ledger_path
+
+    return build
 
 
 @pytest.fixture(scope="session")
