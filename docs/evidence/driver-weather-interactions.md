@@ -33,3 +33,34 @@ Rain chance, track temperature, wind, tyre performance, car setup and wet-transi
 The search compares models on exact Grand Prix winner hits, winner gain over pole, winner Brier, log loss, probability calibration and top-four recall. Select using the 2025 research cohort only; 2026 is a later diagnostic cohort but has already been inspected in earlier work, so it is not truly blind. A 98% exact-winner hit-rate is only a long-term aspiration. The production API and mobile app must not change until a pre-race immutable forecast record and prospective holdout evidence exist.
 
 The original 2024 engine remains reproducible. All feature updates are tested for no-lookahead, driver/constructor temporal boundaries, weather-sample uncertainty and race-cohort parity.
+
+
+## Singapore qualifying, October 10, 2026: why session adaptation matters
+
+The official Formula 1 qualifying report recorded:
+
+- **Verstappen P1**, 1:31.373.
+- **Leclerc P2**, 1:31.427, only 0.054 seconds behind Verstappen.
+- **Hamilton P3**, 1:31.496, 0.123 seconds behind Verstappen.
+
+Hamilton led both Q1 and Q2; Leclerc improved late in Q3 to finish
+ahead of his teammate. The rain-affected Sprint preceded a later drier
+qualifying session, underscoring the risk of comparing raw times between
+different sessions and conditions.
+
+Source: [Formula 1 Singapore qualifying report, published October 10,
+2026](https://www.formula1.com/en/latest/article/verstappen-beats-leclerc-to-pole-position-for-the-singapore-gp.7yum1V3S9aSTyj3Zzzs0Y9).
+
+The `session_progression.py` challenger normalizes each Q1, Q2 and Q3
+time **against the fastest valid time within that same session**, then
+records the driver's relative-gap improvement into Q3. Thus Leclerc's
+late improvement is not mistakenly labeled declining ability because
+Hamilton was initially quicker. Comparisons with the teammate help
+partially control for car performance; tyre choice, team strategy, traffic,
+setup, track evolution and gaps between clean laps are *not* yet isolated.
+
+This qualifies as *post-qualifying* known evidence for the October 11 race,
+**not** a model forecast of the winner. The Singapore Grand Prix outcome is
+not present in the October 10 training snapshot. Stage 2 needs session
+availability timestamps and a pre-race freeze before the current event's
+data can feed real production predictions.
