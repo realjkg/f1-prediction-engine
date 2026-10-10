@@ -54,7 +54,7 @@ npm run build:mobile
 cd android && ./gradlew assembleDebug
 ```
 
-Use the same codebase to build a debug APK fully inside Docker on ARM64/AMD64
+The Android build requires **Java 21** (Capacitor 8) and Node 24. Use the same codebase to build a debug APK fully inside Docker on ARM64/AMD64
 Linux hosts, without installing Android SDK locally:
 
 ```bash
