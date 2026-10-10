@@ -15,6 +15,5 @@ data/training/
 data/snapshot-2025-2026/
 .git/
 .github/
-web/android/
 web/ios/
 web/.env.mobile
