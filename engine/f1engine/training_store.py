@@ -18,7 +18,7 @@ from tempfile import NamedTemporaryFile
 from f1engine.features import AsOfFeatureRow, build_asof_features
 from f1engine.ingestion import PinnedDataset, load_snapshot
 
-STORE_SCHEMA_VERSION = 1
+STORE_SCHEMA_VERSION = 2
 FEATURE_NAMES = (
     "starts", "form_finish_mean", "form_finish_mean_all", "q_best_ms",
     "q_delta_teammate_ms", "q_delta_pole_ms", "team_points_mean",
@@ -52,13 +52,20 @@ CREATE TABLE qualifying (
     PRIMARY KEY(season, round, driver_id),
     FOREIGN KEY(season, round) REFERENCES races(season, round)
 );
+CREATE TABLE sprints (
+    season INTEGER NOT NULL, round INTEGER NOT NULL, driver_id TEXT NOT NULL,
+    constructor_id TEXT NOT NULL, position INTEGER, points REAL NOT NULL,
+    status TEXT NOT NULL,
+    PRIMARY KEY(season, round, driver_id),
+    FOREIGN KEY(season, round) REFERENCES races(season, round)
+);
 CREATE TABLE training_samples (
     season INTEGER NOT NULL, round INTEGER NOT NULL, race_date TEXT NOT NULL,
     driver_id TEXT NOT NULL, constructor_id TEXT NOT NULL,
     starts INTEGER NOT NULL, form_finish_mean REAL, form_finish_mean_all REAL,
     q_best_ms INTEGER, q_delta_teammate_ms REAL, q_delta_pole_ms REAL,
     team_points_mean REAL, track_finish_mean REAL,
-    won INTEGER NOT NULL, podium INTEGER NOT NULL,
+    won INTEGER NOT NULL, podium INTEGER NOT NULL, top4 INTEGER NOT NULL,
     PRIMARY KEY(season, round, driver_id),
     FOREIGN KEY(season, round, driver_id)
         REFERENCES results(season, round, driver_id)
@@ -83,6 +90,7 @@ class TrainingSample:
     values: tuple[float | None, ...]
     won: int
     podium: int
+    top4: int
 
 
 def _combine(snapshots: list[PinnedDataset], cutoff: date) -> tuple[PinnedDataset, dict]:
@@ -168,6 +176,11 @@ def build_training_store(
                  r.q1_ms, r.q2_ms, r.q3_ms)
                 for r in combined.qualifying
             ])
+            db.executemany("INSERT INTO sprints VALUES (?, ?, ?, ?, ?, ?, ?)", [
+                (r.season, r.round, r.driver_id, r.constructor_id,
+                 r.position, r.points, r.status)
+                for r in combined.sprints
+            ])
             labels = {(r.season, r.round, r.driver_id): r.position for r in combined.results}
             race_dates = {(r.season, r.round): r.date for r in combined.races}
             rows = []
@@ -180,9 +193,10 @@ def build_training_store(
                     f.season, f.round, race_dates[(f.season, f.round)], f.driver_id,
                     f.constructor_id, *_sample_values(f), int(position == 1),
                     int(position is not None and position <= 3),
+                    int(position is not None and position <= 4),
                 ))
             db.executemany(
-                "INSERT INTO training_samples VALUES (" + ",".join(["?"] * 15) + ")", rows
+                "INSERT INTO training_samples VALUES (" + ",".join(["?"] * 16) + ")", rows
             )
             db.commit()
         os.replace(tmp_name, output)
@@ -190,7 +204,8 @@ def build_training_store(
         if tmp_name and os.path.exists(tmp_name):
             os.unlink(tmp_name)
     return {"datasets": len(snapshots), "races": len(combined.races),
-            "results": len(combined.results), "samples": len(rows)}
+            "results": len(combined.results), "sprints": len(combined.sprints),
+            "samples": len(rows)}
 
 
 def training_rows_before(
@@ -199,7 +214,7 @@ def training_rows_before(
     """Fit only on prior rounds. Query ordering is deterministic."""
     cols = ", ".join(FEATURE_NAMES)
     sql = (
-        "SELECT season, round, driver_id, " + cols + ", won, podium "
+        "SELECT season, round, driver_id, " + cols + ", won, podium, top4 "
         "FROM training_samples WHERE season < ? OR (season = ? AND round < ?) "
         "ORDER BY season, round, driver_id"
     )
@@ -207,7 +222,7 @@ def training_rows_before(
         TrainingSample(
             season=row[0], round=row[1], driver_id=row[2],
             values=tuple(row[3:3 + len(FEATURE_NAMES)]),
-            won=row[-2], podium=row[-1],
+            won=row[-3], podium=row[-2], top4=row[-1],
         )
         for row in db.execute(sql, (season, season, round_number))
     ]
