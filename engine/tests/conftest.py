@@ -22,6 +22,7 @@ from f1engine.ingestion import PinnedDataset, load_snapshot
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "refresh-data.py"
+DEMO_SCRIPT_PATH = REPO_ROOT / "scripts" / "demo.py"
 REPO_SNAPSHOT = REPO_ROOT / "data" / "snapshot"
 
 
@@ -38,6 +39,22 @@ def _load_refresh_module() -> ModuleType:
 @pytest.fixture(scope="session")
 def refresh() -> ModuleType:
     return _load_refresh_module()
+
+
+def _load_demo_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("demo", DEMO_SCRIPT_PATH)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise RuntimeError(f"cannot load {DEMO_SCRIPT_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("demo", module)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(scope="session")
+def demo() -> ModuleType:
+    """The demo runner module (scripts/demo.py), loaded once per session."""
+    return _load_demo_module()
 
 
 @dataclass(frozen=True)

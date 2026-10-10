@@ -1,0 +1,54 @@
+# Alert rules over the closed signal enum (spec: engine/f1engine/observability).
+#
+# Coverage contract, enforced by test (test_observability.py):
+#   - every rule's `signal` must be a defined Signal value, and its
+#     `statuses` must all be defined EventStatus values;
+#   - every Signal must appear in at least one rule OR be listed under
+#     uncoveredByDesign with a reason — no signal may go silently unwired.
+rules:
+  - name: data-snapshot-refused
+    signal: data-ingest
+    statuses: [blocked, failed]
+    severity: critical
+    description: >
+      Snapshot verification refused a load — hash, version, schema, or
+      credential refusal (the DATA_SNAPSHOT_MISMATCH family).
+
+  - name: prediction-latency-regressed
+    signal: prediction-latency
+    statuses: [degraded]
+    severity: warning
+    description: >
+      A model's predict stage ran markedly slower than its usual budget —
+      the latency histogram should corroborate.
+
+  - name: backtest-accuracy-regressed
+    signal: backtest-accuracy
+    statuses: [degraded, failed]
+    severity: warning
+    description: >
+      A backtest run degraded (measured accuracy below the recorded floor)
+      or failed outright — the demonstrator's evidence of accuracy is at risk.
+
+  - name: brief-generation-failed
+    signal: brief-generation
+    statuses: [degraded, failed]
+    severity: info
+    description: >
+      Race-brief generation degraded (e.g. degraded to the deterministic
+      fixture) or failed; the brief is advisory and never blocks predictions.
+
+  - name: evidence-lifecycle-failure
+    signal: evidence-lifecycle
+    statuses: [blocked, failed]
+    severity: critical
+    description: >
+      The evidence ledger refused a record or failed chain verification —
+      the demo's tamper-evidence contract is not holding.
+
+uncoveredByDesign:
+  - signal: prediction-disagreement
+    reason: >
+      Advisory consensus flag — a low-consensus race is information the
+      product shows the customer, not an incident; alerting on it would page
+      on healthy, honest disagreement (spec: flagged, never suppressed).
