@@ -71,7 +71,7 @@ challengers; promotion needs evidence on held-out races.
    under the 2026 regulations, emphasize recent form only if out-of-sample
    evaluation supports doing so, and distinguish wet/dry track conditions.
 3. **Richer session telemetry:** evaluate licensed practice long-run pace,
-   tyre degradation, reliability and pit-stop patterns. The OpenF1 weather
+   tire degradation, reliability and pit-stop patterns. The OpenF1 weather
    source is declared but **not ingested** by this release.
 4. **Proper calibration:** use chronological 2025 to select the model or
    ensemble weights; use 2026 as a later, untouched evaluation set.
