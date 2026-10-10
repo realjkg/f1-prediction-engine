@@ -20,7 +20,8 @@ from sklearn.preprocessing import StandardScaler
 from f1engine.driver_dynamics import dynamics_feature_index, with_dynamics
 from f1engine.qualifying_features import qualifying_feature_index, with_qualifying
 from f1engine.session_progression import (
-    session_progression_index, with_session_progression,
+    session_progression_index,
+    with_session_progression,
 )
 from f1engine.training_store import FEATURE_NAMES, TrainingSample, training_rows_before
 
