@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:mobile": "node scripts/check-mobile-config.mjs && tsc --noEmit && vite build && cap sync",
     "test": "vitest run",
     "lint": "tsc --noEmit",
     "preview": "vite preview"
