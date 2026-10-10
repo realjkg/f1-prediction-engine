@@ -17,7 +17,7 @@
   "devDependencies": {
     "@capacitor/android": "^8.5.3",
     "@capacitor/app": "^8.1.2",
-    "@capacitor/cli": "^7.6.9",
+    "@capacitor/cli": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
     "@testing-library/dom": "^10.4.0",
