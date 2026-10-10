@@ -21,10 +21,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import uvicorn
-from f1engine.app import APP_TITLE, APP_VERSION, create_app
+from f1engine.app import APP_TITLE, APP_VERSION, ApiSettings, create_app
 from f1engine.backtest import (
     METRIC_DEFINITIONS,
     BacktestResult,
@@ -199,7 +200,12 @@ def verify(data_dir: Path) -> PinnedDataset:
     return dataset
 
 
-def serve(port: int, host: str, evidence_basis: str = EVIDENCE_BASIS) -> None:
+def serve(
+    port: int,
+    host: str,
+    evidence_basis: str = EVIDENCE_BASIS,
+    data_dir: Path | None = None,
+) -> None:
     """Serve the engine API until interrupted, behind the evidence banner."""
     banner = f"{APP_TITLE} v{APP_VERSION} — {evidence_basis}"
     print(f"[demo:serve] {banner}", flush=True)
@@ -207,7 +213,10 @@ def serve(port: int, host: str, evidence_basis: str = EVIDENCE_BASIS) -> None:
         f"[demo:serve] listening on http://{host}:{port} (docs at /docs, metrics at /metrics)",
         flush=True,
     )
-    uvicorn.run(create_app(), host=host, port=port, log_level="warning")
+    settings = ApiSettings.from_env()
+    if data_dir is not None:
+        settings = replace(settings, data_dir=data_dir)
+    uvicorn.run(create_app(settings), host=host, port=port, log_level="warning")
 
 
 def run_demo(
@@ -263,7 +272,12 @@ def main(argv: list[str] | None = None) -> int:
 
     run_demo(args.data_dir, args.ledger, args.season, brief=not args.no_brief)
     if not args.no_serve:
-        serve(args.port, args.host, evidence_basis_for(load_snapshot(args.data_dir)))
+        serve(
+            args.port,
+            args.host,
+            evidence_basis_for(load_snapshot(args.data_dir)),
+            data_dir=args.data_dir,
+        )
     return 0
 
 
