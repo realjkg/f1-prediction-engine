@@ -47,7 +47,7 @@ jobs:
       # actions/setup-node v7.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Install web deps
@@ -74,7 +74,7 @@ jobs:
       # actions/setup-node v7.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
-          node-version: "20"
+          node-version: "24"
       - name: Install pip-audit (version-pinned)
         run: python3 -m pip install -q pip-audit==2.10.1
       - name: pip-audit engine runtime lock

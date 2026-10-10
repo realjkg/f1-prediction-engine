@@ -17,7 +17,7 @@ and ship that proof in a hash-chained ledger — reproducible to the byte
 
 ## One-command quickstart
 
-Prerequisites: Python 3.12+, Node 20+. No API keys, no network after install
+Prerequisites: Python 3.12+, Node 24+. No API keys, no network after install
 (the pinned dataset ships in the repo).
 
 ```bash
