@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 
 from f1engine.session_progression import (
-    SESSION_FEATURE_NAMES, session_progression_index,
+    SESSION_FEATURE_NAMES,
+    session_progression_index,
     with_session_progression,
 )
 from f1engine.training_store import build_training_store, training_rows_before
