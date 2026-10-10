@@ -17,6 +17,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from f1engine.qualifying_features import qualifying_feature_index, with_qualifying
 from f1engine.training_store import FEATURE_NAMES, TrainingSample, training_rows_before
 
 
@@ -28,6 +29,9 @@ class SeasonScore:
     winner_hit_rate: float
     mean_brier: float
     top4_recall: float
+    mean_winner_log_loss: float
+    winner_confidence_ece: float
+    feature_mode: str
 
 
 def _array(samples: list[TrainingSample]) -> np.ndarray:
@@ -88,8 +92,9 @@ def _predict(
         return _win_normalize(strength), strength
     x_train = _array(history)
     x_target = _array(target)
-    win_model = _estimator(method)
-    top4_model = _estimator(method)
+    estimator_name = method.removesuffix("-qual")
+    win_model = _estimator(estimator_name)
+    top4_model = _estimator(estimator_name)
     win_model.fit(x_train, np.asarray([row.won for row in history]))
     top4_model.fit(x_train, np.asarray([row.top4 for row in history]))
     p_win = win_model.predict_proba(x_target)[:, 1]
@@ -101,8 +106,10 @@ def evaluate_season(
     db: sqlite3.Connection, season: int, *, method: str
 ) -> SeasonScore:
     """Report honest holdout metrics; no same-round or future-race labels."""
-    if method not in {"form", "logit", "gbm"}:
+    if method not in {"form", "logit", "gbm", "logit-qual", "gbm-qual"}:
         raise ValueError("unsupported method")
+    qualify = method.endswith("-qual")
+    qualifying_index = qualifying_feature_index(db) if qualify else {}
     rounds = [
         row[0] for row in db.execute(
             "SELECT DISTINCT round FROM training_samples "
@@ -111,12 +118,25 @@ def evaluate_season(
     ]
     hits: list[float] = []
     briers: list[float] = []
+    log_losses: list[float] = []
+    top_picks: list[tuple[float, float]] = []
     top4_recalls: list[float] = []
     for round_number in rounds:
         previous = training_rows_before(db, season, round_number)
         target = _target_samples(db, season, round_number)
         if not target or len(previous) < 50:
             continue
+        if qualify:
+            # A qualifying-conditional model needs a genuine observed session
+            # for the target race. No predictions from race result grid fields.
+            seen = sum(
+                qualifying_index.get((row.season, row.round, row.driver_id), (None,))[0]
+                is not None for row in target
+            )
+            if seen < 2:
+                continue
+            previous = with_qualifying(previous, qualifying_index)
+            target = with_qualifying(target, qualifying_index)
         if method != "form" and (
             len({row.won for row in previous}) < 2
             or len({row.top4 for row in previous}) < 2
@@ -125,8 +145,14 @@ def evaluate_season(
         win, p_top4 = _predict(previous, target, method)
         actual_win = np.asarray([row.won for row in target])
         actual_top4 = np.asarray([row.top4 for row in target])
-        hits.append(float(int(np.argmax(win) == np.argmax(actual_win))))
+        correct = float(int(np.argmax(win) == np.argmax(actual_win)))
+        hits.append(correct)
         briers.append(float(np.sum((win - actual_win) ** 2)))
+        # Winner log loss is based on the entire race distribution, not 20
+        # independent Bernoulli claims. A tiny clip keeps it finite.
+        actual_idx = int(np.argmax(actual_win))
+        log_losses.append(float(-np.log(np.clip(win[actual_idx], 1e-12, 1.0))))
+        top_picks.append((float(win.max()), correct))
         picked_top4 = set(np.argsort(-p_top4)[:4].tolist())
         actual_top4_indices = {i for i, row in enumerate(actual_top4) if row}
         if actual_top4_indices:
@@ -135,9 +161,27 @@ def evaluate_season(
             )
     if not hits:
         raise ValueError(f"insufficient chronological data to score season {season}")
+    # Coarse top-pick reliability curve; not a substitute for full
+    # multiclass calibration. Keep binning fixed before viewing holdouts.
+    calibration_error = 0.0
+    for low, high in zip((0.0, 0.2, 0.4, 0.6, 0.8),
+                         (0.2, 0.4, 0.6, 0.8, 1.01), strict=True):
+        values = [
+            (confidence, hit) for confidence, hit in top_picks
+            if low <= confidence < high
+        ]
+        if values:
+            calibration_error += len(values) / len(top_picks) * abs(
+                sum(conf for conf, _ in values) / len(values)
+                - sum(hit for _, hit in values) / len(values)
+            )
     return SeasonScore(
         model=method, season=season, races_scored=len(hits),
         winner_hit_rate=sum(hits) / len(hits),
         mean_brier=sum(briers) / len(briers),
         top4_recall=sum(top4_recalls) / len(top4_recalls),
+        mean_winner_log_loss=sum(log_losses) / len(log_losses),
+        winner_confidence_ece=calibration_error,
+        feature_mode="post-qualifying replay; source publication timestamp unverified"
+        if qualify else "prior-round historical",
     )
