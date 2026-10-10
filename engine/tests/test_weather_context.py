@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -103,3 +104,36 @@ def test_rejects_untrustworthy_weather_claims() -> None:
             source_url="https://weather.example.org/forecast",
             rain_probability=98.0,
         )
+
+
+def test_weather_is_driver_experience_modifier_not_race_determinant(
+    mini_snapshot: Path, tmp_path: Path
+) -> None:
+    path = tmp_path / "f1.sqlite"
+    build_training_store([mini_snapshot], path, as_of=date(2022, 1, 1))
+    history = [observed(1, True), observed(2, False)]
+    cutoff = datetime(2021, 6, 29, tzinfo=UTC)
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "UPDATE results SET status='Mechanical' "
+            "WHERE season=2021 AND round=2 AND driver_id='test-driver'"
+        )
+        wet_likely = prior_weather_reliability(
+            db, "test-driver", history, forecast(),
+            prediction_cutoff=cutoff, minimum_per_condition=1,
+        )
+        dry_likely = prior_weather_reliability(
+            db, "test-driver", history,
+            replace(forecast(), rain_probability=0.2),
+            prediction_cutoff=cutoff, minimum_per_condition=1,
+        )
+    assert wet_likely.driver_baseline_classification_rate == pytest.approx(0.5)
+    assert wet_likely.wet_classification_rate == pytest.approx(1.0)
+    assert wet_likely.dry_classification_rate == pytest.approx(0.0)
+    assert wet_likely.wet_experience_weight == pytest.approx(0.2)
+    assert wet_likely.driver_condition_modifier == pytest.approx(0.06)
+    assert wet_likely.forecast_weighted_classification_rate == pytest.approx(0.56)
+    assert dry_likely.forecast_weighted_classification_rate == pytest.approx(0.44)
+    assert wet_likely.forecast_weighted_classification_rate != pytest.approx(
+        forecast().rain_probability
+    )
