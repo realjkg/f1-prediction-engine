@@ -55,9 +55,9 @@ jobs:
           cp data/snapshot/DATA_LICENSE.md data/snapshot-2025-2026/DATA_LICENSE.md
       - name: Benchmark warehouse-trained models out of sample
         run: |
-          python3 scripts/benchmark-training-store.py \\
-            --store data/training/f1-training.sqlite \\
-            --season 2025 --season 2026 \\
+          python3 scripts/benchmark-training-store.py \
+            --store data/training/f1-training.sqlite \
+            --season 2025 --season 2026 \
             --report data/training/holdout-report.json
       - name: Upload verified training artifact (not an unreviewed repo commit)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
