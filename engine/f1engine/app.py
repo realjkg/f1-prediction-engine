@@ -24,7 +24,13 @@ Failure discipline at the boundary:
   be verified is evidence that is not served. An absent ledger is not an
   error: the store is simply empty until the demo scenario writes records.
 - Unknown races 404 with a typed code: ``RACE_UNKNOWN`` (race not in the
-  snapshot) or ``PREDICTIONS_NOT_FOUND`` (race known, no records yet).
+  snapshot), ``RACE_AMBIGUOUS`` (a race id that repeats across snapshot
+  seasons — result identity is (race_id, season), so the caller must pin
+  one), or ``PREDICTIONS_NOT_FOUND`` (race known, no records yet).
+- The ledger is read as the closed record union (prediction + backtest
+  records) through the evidence module's own parser, so what the API
+  serves is exactly what the chain verifier accepts — the demo scenario's
+  backtest record is ledger evidence like any other.
 - Game-scoring refusals are typed too: a race with no classified result 404s
   with ``RESULT_NOT_FOUND``, and a call that is not three distinct snapshot
   drivers 422s with ``CALL_MALFORMED``.
@@ -38,7 +44,6 @@ observability internals.
 
 from __future__ import annotations
 
-import json
 import os
 import time
 from collections.abc import Mapping, Sequence
@@ -48,15 +53,15 @@ from typing import Annotated, Literal, Protocol
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import ValidationError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from f1engine.backtest import ClassifiedResult, classify_round
 from f1engine.ensemble import PODIUM_SPREAD_OK_THRESHOLD
 from f1engine.evidence import (
     EvidenceError,
-    EvidenceSchemaInvalid,
+    LedgerRecord,
     PredictionRecord,
+    parsed_record,
     verify_chain,
 )
 from f1engine.ingestion import PinnedDataset, load_snapshot
@@ -201,7 +206,7 @@ class EventsView(WireModel):
 class EvidencePage(WireModel):
     """One page of ledger records plus the verification status it was served under."""
 
-    records: list[PredictionRecord]
+    records: list[LedgerRecord]
     total: int
     offset: int
     limit: int
@@ -287,8 +292,26 @@ class RaceCatalog:
     def knows(self, race_id: str) -> bool:
         return race_id in self._known_race_ids
 
-    def race(self, race_id: str) -> RaceSummary | None:
-        """One race by id, or None when the snapshot does not know it."""
+    def seasons_for(self, race_id: str) -> list[int]:
+        """Seasons whose snapshot rows carry this race id, oldest first.
+
+        Race ids are unique per season, not globally — the snapshot reuses
+        them across years. An id with more than one season here is ambiguous
+        for result or scoring lookups until the caller pins a season.
+        """
+        return [race.season for race in self._races if race.race_id == race_id]
+
+    def race(self, race_id: str, season: int | None = None) -> RaceSummary | None:
+        """One race by id — optionally pinned to a season — or None."""
+        if season is not None:
+            return next(
+                (
+                    race
+                    for race in self._races
+                    if race.race_id == race_id and race.season == season
+                ),
+                None,
+            )
         return next((race for race in self._races if race.race_id == race_id), None)
 
 
@@ -304,7 +327,8 @@ class LedgerStore:
     def __init__(self, ledger_path: Path) -> None:
         self._ledger_path = ledger_path
 
-    def read_all(self) -> list[PredictionRecord]:
+    def read_all(self) -> list[LedgerRecord]:
+        """Every record, prediction and backtest alike, after chain verification."""
         verify_chain(self._ledger_path)
         if not self._ledger_path.exists():
             return []
@@ -313,13 +337,20 @@ class LedgerStore:
             for index, line in enumerate(self._lines())
         ]
 
-    def records_for_race(self, race_id: str) -> list[PredictionRecord]:
+    def records_for_race(
+        self, race_id: str, season: int | None = None
+    ) -> list[PredictionRecord]:
+        """The prediction records for one race — backtest records are not race-scoped."""
         return [
-            record for record in self.read_all() if record.race.race_id == race_id
+            record
+            for record in self.read_all()
+            if isinstance(record, PredictionRecord)
+            and record.race.race_id == race_id
+            and (season is None or record.race.season == season)
         ]
 
     def page(self, offset: int, limit: int) -> EvidencePage:
-        records = self.read_all()
+        records: list[LedgerRecord] = self.read_all()
         return EvidencePage(
             records=records[offset : offset + limit],
             total=len(records),
@@ -335,14 +366,9 @@ class LedgerStore:
             if line.strip()
         ]
 
-    def _record(self, index: int, line: str) -> PredictionRecord:
-        try:
-            payload = json.loads(line)
-            return PredictionRecord.model_validate(payload)
-        except (json.JSONDecodeError, ValidationError) as error:
-            raise EvidenceSchemaInvalid(
-                f"ledger line {index} failed the closed record schema: {error}"
-            ) from error
+    def _record(self, index: int, line: str) -> LedgerRecord:
+        """Parse with the chain verifier's own grammar — the closed record union."""
+        return parsed_record(index, line)
 
 
 class EventSource(Protocol):
@@ -466,12 +492,19 @@ def _error(status_code: int, code: str, message: str) -> HTTPException:
     )
 
 
-def _classified_result(dataset: PinnedDataset, race_id: str) -> ClassifiedResult | None:
-    """Classify one race's results with the backtest's shared classifier."""
+def _classified_result(
+    dataset: PinnedDataset, race_id: str, season: int
+) -> ClassifiedResult | None:
+    """Classify one season's round with the backtest's shared classifier.
+
+    Race ids repeat across seasons in the snapshot, so result identity is
+    (race_id, season) — the same key the backtest's own actuals table uses.
+    A race id alone would blend seasons' results into one podium.
+    """
     entries = [
         (row.position, row.driver_id)
         for row in dataset.results
-        if row.race_id == race_id
+        if row.race_id == race_id and row.season == season
     ]
     return classify_round(entries)
 
@@ -545,6 +578,36 @@ def create_app(
     )
     app.add_middleware(RequestMetricsMiddleware, metrics=metrics)
 
+    def resolve_race(race_id: str, season: int | None) -> RaceSummary:
+        """Resolve one race, refusing season ambiguity — fail-closed identity.
+
+        Race ids are unique per season, not globally: the snapshot reuses
+        them across years (28 of the 107 snapshot ids repeat). A result or
+        score keyed by race id alone would blend seasons' results into one
+        garbage podium, so an id that spans seasons must be pinned to one.
+        """
+        if not catalog.knows(race_id):
+            raise _error(
+                404, "RACE_UNKNOWN", f"no race {race_id!r} in the pinned snapshot"
+            )
+        if season is None:
+            seasons = catalog.seasons_for(race_id)
+            if len(seasons) > 1:
+                raise _error(
+                    409,
+                    "RACE_AMBIGUOUS",
+                    f"race id {race_id!r} spans seasons {seasons} in the snapshot "
+                    "— pass ?season=<year> to disambiguate",
+                )
+        race = catalog.race(race_id, season)
+        if race is None:
+            raise _error(
+                404,
+                "RACE_UNKNOWN",
+                f"no race {race_id!r} for season {season} in the pinned snapshot",
+            )
+        return race
+
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         return {"status": "ok", "version": APP_VERSION}
@@ -562,14 +625,14 @@ def create_app(
         return catalog.list_races()
 
     @app.get("/api/predictions/{race_id}")
-    def race_predictions(race_id: str) -> PredictionsView:
+    def race_predictions(
+        race_id: str,
+        season: Annotated[int | None, Query()] = None,
+    ) -> PredictionsView:
         """The ledger's prediction records for one race, per-model + ensemble."""
-        if not catalog.knows(race_id):
-            raise _error(
-                404, "RACE_UNKNOWN", f"no race {race_id!r} in the pinned snapshot"
-            )
+        race = resolve_race(race_id, season)
         try:
-            records = ledger.records_for_race(race_id)
+            records = ledger.records_for_race(race_id, race.season)
         except EvidenceError as error:
             raise _error(503, error.code, str(error)) from error
         if not records:
@@ -581,14 +644,13 @@ def create_app(
         return PredictionsView(predictions=records, total=len(records))
 
     @app.get("/api/races/{race_id}/result")
-    def race_result(race_id: str) -> RaceResultView:
+    def race_result(
+        race_id: str,
+        season: Annotated[int | None, Query()] = None,
+    ) -> RaceResultView:
         """A round's classified result — podium first, full order behind it."""
-        race = catalog.race(race_id)
-        if race is None:
-            raise _error(
-                404, "RACE_UNKNOWN", f"no race {race_id!r} in the pinned snapshot"
-            )
-        result = _classified_result(loaded, race_id)
+        race = resolve_race(race_id, season)
+        result = _classified_result(loaded, race_id, race.season)
         if result is None:
             raise _error(
                 404,
@@ -614,6 +676,7 @@ def create_app(
         race_id: str,
         call: Annotated[str | None, Query()] = None,
         streak_before: Annotated[int, Query(ge=0)] = 0,
+        season: Annotated[int | None, Query()] = None,
     ) -> CallScore:
         """Score one locked call — the client never invents scores.
 
@@ -624,12 +687,8 @@ def create_app(
         never recomputed — so a round with no prediction record has no
         ensemble verdict to double on and is refused (PREDICTIONS_NOT_FOUND).
         """
-        race = catalog.race(race_id)
-        if race is None:
-            raise _error(
-                404, "RACE_UNKNOWN", f"no race {race_id!r} in the pinned snapshot"
-            )
-        result = _classified_result(loaded, race_id)
+        race = resolve_race(race_id, season)
+        result = _classified_result(loaded, race_id, race.season)
         if result is None:
             raise _error(
                 404,
@@ -637,7 +696,7 @@ def create_app(
                 f"no classified result for {race_id!r} in the snapshot",
             )
         try:
-            records = ledger.records_for_race(race_id)
+            records = ledger.records_for_race(race_id, race.season)
         except EvidenceError as error:
             raise _error(503, error.code, str(error)) from error
         if not records:

@@ -28,7 +28,13 @@ from f1engine.app import (
     EventView,
     create_app,
 )
+from f1engine.backtest import classify_round
 from f1engine.ensemble import PODIUM_SPREAD_OK_THRESHOLD
+from f1engine.evidence import (
+    BacktestMetrics,
+    append_record,
+    build_backtest_record,
+)
 from f1engine.ingestion import PinnedDataset, SnapshotVersionMismatch
 from f1engine.observability import EventStatus, Signal
 
@@ -420,3 +426,154 @@ def test_startup_refuses_a_mismatched_snapshot(
 
     with pytest.raises(SnapshotVersionMismatch):
         create_app(ApiSettings(data_dir=copied))
+
+
+# ---------------------------------------------------------------------------
+# The closed ledger union — backtest records are ledger evidence too.
+# ---------------------------------------------------------------------------
+
+_METRIC_DEFINITIONS = {
+    "winner_hit_rate": "fraction of scored rounds whose top pick was the winner",
+    "podium3_hit_rate": "fraction of scored rounds whose top-3 picks were the podium",
+    "mean_brier": "mean multi-class Brier score of the winner distribution",
+}
+
+
+def _backtest_metrics() -> dict[str, BacktestMetrics]:
+    return {
+        model_id: BacktestMetrics(
+            rounds=1, winner_hit_rate=1.0, podium3_hit_rate=1.0, mean_brier=0.5
+        )
+        for model_id in ("m1-gbm", "m2-logit", "m3-form", "ensemble")
+    }
+
+
+def test_evidence_serves_the_backtest_record_beside_predictions(
+    predictable_dataset: PinnedDataset,
+    ledger_factory: Callable[..., Path],
+) -> None:
+    """The demo ledger carries a backtest record — the API must serve the union.
+
+    Regression: the read-side store validated every line as a
+    PredictionRecord, so the demo's own backtest record 503'd the entire
+    Evidence Room.
+    """
+    ledger_path = ledger_factory(4, 5)
+    append_record(
+        ledger_path,
+        build_backtest_record(
+            predictable_dataset,
+            season=2021,
+            first_round=4,
+            last_round=5,
+            metrics=_backtest_metrics(),
+            metric_definitions=_METRIC_DEFINITIONS,
+            skipped_rounds=[],
+            evidence_basis=EVIDENCE_BASIS,
+        ),
+    )
+    client = _client(predictable_dataset, ledger_path)
+
+    page = client.get("/api/evidence")
+    assert page.status_code == 200
+    body = page.json()
+    assert body["total"] == 3
+    assert body["chainValid"] is True
+    assert [record["recordType"] for record in body["records"]] == [
+        "prediction",
+        "prediction",
+        "backtest",
+    ]
+    assert body["records"][2]["backtestId"] == "backtest-2021"
+    assert set(body["records"][2]["metrics"]) == {
+        "m1-gbm",
+        "m2-logit",
+        "m3-form",
+        "ensemble",
+    }
+
+    # Race-scoped reads stay race-scoped: the backtest record answers no race.
+    predictions = client.get("/api/predictions/fourth-grand-prix")
+    assert predictions.status_code == 200
+    assert predictions.json()["total"] == 1
+    assert predictions.json()["predictions"][0]["recordType"] == "prediction"
+
+
+# ---------------------------------------------------------------------------
+# Race identity is (race_id, season) — the snapshot repeats race ids.
+# ---------------------------------------------------------------------------
+
+# Five snapshot seasons (2020-2024) carry this race id.
+AMBIGUOUS_RACE = "austrian-grand-prix"
+
+
+def test_an_ambiguous_race_id_refuses_without_a_season(
+    real_snapshot: PinnedDataset,
+) -> None:
+    """A race id spanning seasons must be pinned — merged results are garbage."""
+    client = _client(real_snapshot)
+
+    for endpoint in (
+        f"/api/races/{AMBIGUOUS_RACE}/result",
+        f"/api/races/{AMBIGUOUS_RACE}/score",
+    ):
+        response = client.get(endpoint)
+        assert response.status_code == 409, endpoint
+        detail = response.json()["detail"]
+        assert detail["code"] == "RACE_AMBIGUOUS", endpoint
+        assert "season" in detail["message"], endpoint
+
+
+def test_a_season_qualified_result_serves_one_season_only(
+    real_snapshot: PinnedDataset,
+) -> None:
+    client = _client(real_snapshot)
+
+    # The classifier over that season's rows alone — the module's own answer.
+    entries = [
+        (row.position, row.driver_id)
+        for row in real_snapshot.results
+        if row.race_id == AMBIGUOUS_RACE and row.season == 2024
+    ]
+    expected = classify_round(entries)
+    assert expected is not None  # the 2024 round has a classified winner
+
+    response = client.get(
+        f"/api/races/{AMBIGUOUS_RACE}/result", params={"season": 2024}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["season"] == 2024
+    assert body["winner"] == expected.winner
+    assert body["podium"] == list(expected.podium)
+    drivers = [row["driverId"] for row in body["classified"]]
+    positions = [row["position"] for row in body["classified"]]
+    assert len(set(drivers)) == len(drivers)  # no season-merged duplicates
+    assert positions == sorted(positions)
+
+
+def test_score_pins_the_requested_season(
+    real_snapshot: PinnedDataset, tmp_path: Path
+) -> None:
+    client = _client(real_snapshot, tmp_path / "absent-ledger.jsonl")
+
+    # Past the ambiguity refusal the scoring path runs one season's round —
+    # an empty ledger means no ensemble verdict: a typed 404, not a blend.
+    response = client.get(
+        f"/api/races/{AMBIGUOUS_RACE}/score",
+        params={"season": 2024, "call": "max_verstappen,alonso,perez"},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "PREDICTIONS_NOT_FOUND"
+
+
+def test_a_known_race_with_an_unknown_season_is_race_unknown(
+    real_snapshot: PinnedDataset,
+) -> None:
+    client = _client(real_snapshot)
+
+    response = client.get(
+        f"/api/races/{AMBIGUOUS_RACE}/result", params={"season": 1999}
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "RACE_UNKNOWN"

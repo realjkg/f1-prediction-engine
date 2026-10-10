@@ -289,6 +289,24 @@ def append_record(
     return digest
 
 
+def parsed_record(index: int, line: str) -> LedgerRecord:
+    """Parse one ledger line into the closed record union.
+
+    Public so every reader of the ledger (the chain verifier and the API's
+    read-side store) parses with the same grammar — a record the verifier
+    would refuse is a record the API cannot serve.
+    """
+    try:
+        payload = json.loads(line)
+    except json.JSONDecodeError as error:
+        raise EvidenceSchemaInvalid(
+            f"ledger line {index} is not valid JSON: {error}"
+        ) from error
+    if not isinstance(payload, dict):
+        raise EvidenceSchemaInvalid(f"ledger line {index} is not a JSON object")
+    return _validated_record(payload)
+
+
 def verify_chain(ledger_path: Path) -> None:
     """Walk the whole chain; raise on tamper, gap, or schema failure.
 
@@ -300,7 +318,7 @@ def verify_chain(ledger_path: Path) -> None:
         return
     previous: str | None = None
     for index, line in enumerate(_ledger_lines(ledger_path)):
-        record = _parsed_record(index, line)
+        record = parsed_record(index, line)
         if record.record_sha256 != _record_digest(record):
             raise EvidenceTampered(
                 f"ledger line {index}: content re-hash does not match its "
@@ -337,18 +355,6 @@ def _validated_record(payload: dict[str, object]) -> LedgerRecord:
         ) from error
 
 
-def _parsed_record(index: int, line: str) -> LedgerRecord:
-    try:
-        payload = json.loads(line)
-    except json.JSONDecodeError as error:
-        raise EvidenceSchemaInvalid(
-            f"ledger line {index} is not valid JSON: {error}"
-        ) from error
-    if not isinstance(payload, dict):
-        raise EvidenceSchemaInvalid(f"ledger line {index} is not a JSON object")
-    return _validated_record(payload)
-
-
 def _ledger_lines(ledger_path: Path) -> list[str]:
     return [
         line
@@ -364,7 +370,7 @@ def _last_record_hash(ledger_path: Path) -> str | None:
     lines = _ledger_lines(ledger_path)
     if not lines:
         return None
-    last = _parsed_record(len(lines) - 1, lines[-1])
+    last = parsed_record(len(lines) - 1, lines[-1])
     return last.record_sha256
 
 
