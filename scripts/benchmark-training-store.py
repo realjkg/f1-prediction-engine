@@ -27,11 +27,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     with sqlite3.connect(args.store) as db:
         data = {
-            "method": "expanding-window, no target/future labels",
+            "method": "expanding-window, strictly earlier race-result labels; qualifying-conditional challengers are retrospective unless timestamp verified",
             "source": "verified SQL training_samples",
             "results": [
                 asdict(evaluate_season(db, season, method=model))
-                for season in args.season for model in ("form", "logit", "gbm")
+                for season in args.season
+                for model in ("form", "logit", "gbm", "pole", "logit-qual", "gbm-qual", "logit-dyn-qual", "gbm-dyn-qual",
+                              "gbm-session-qual", "gbm-dyn-session-qual")
             ],
         }
     report = json.dumps(data, indent=2) + "\n"

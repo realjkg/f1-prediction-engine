@@ -1,6 +1,6 @@
 # F1 Prediction Engine — developer and demo entry points.
 
-.PHONY: demo engine-install web-install test lint refresh-data refresh-fall-2026 demo-fall-2026
+.PHONY: demo engine-install web-install test lint refresh-data refresh-fall-2026 demo-fall-2026 training-store
 
 demo: engine-install web-install ## One-command demo: verify → predict → prove → narrate → serve
 	python3 scripts/demo.py --data-dir data/snapshot --port 8000
@@ -16,6 +16,9 @@ refresh-fall-2026: engine-install ## Build separate as-of 2026-10-10 snapshot wi
 
 demo-fall-2026: engine-install web-install ## Score completed 2026 rounds using the refreshed snapshot
 	python3 scripts/demo.py --data-dir data/snapshot-fall-2026 --season 2026
+
+training-store: engine-install ## Versioned SQLite feature store and backtest results
+	python3 scripts/build-training-store.py --season 2024
 
 web-install: ## Install the PWA workspace
 	npm --prefix web ci

@@ -6,6 +6,19 @@ on:
       - "scripts/refresh-data.py"
       - "scripts/build-training-store.py"
       - "engine/f1engine/training_store.py"
+      - "engine/f1engine/qualifying_features.py"
+      - "engine/f1engine/store_benchmark.py"
+      - "engine/f1engine/model_search.py"
+      - "engine/f1engine/driver_dynamics.py"
+      - "engine/f1engine/session_progression.py"
+      - "engine/tests/test_session_progression.py"
+      - "engine/f1engine/weather_context.py"
+      - "engine/tests/test_driver_dynamics.py"
+      - "engine/tests/test_weather_context.py"
+      - "engine/tests/test_model_search.py"
+      - "scripts/search-f1-challengers.py"
+      - "scripts/benchmark-training-store.py"
+      - "engine/tests/test_qualifying_features.py"
       - "engine/tests/test_training_store.py"
       - ".github/workflows/refresh-season-data.yml"
   workflow_dispatch:
@@ -59,6 +72,11 @@ jobs:
             --store data/training/f1-training.sqlite \
             --season 2025 --season 2026 \
             --report data/training/holdout-report.json
+      - name: Compare bounded challengers against pole-position baseline
+        run: |
+          python3 scripts/search-f1-challengers.py \
+            --store data/training/f1-training.sqlite \
+            --report data/training/model-search-report.json
       - name: Upload verified training artifact (not an unreviewed repo commit)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -67,5 +85,6 @@ jobs:
             data/snapshot-2025-2026/
             data/training/f1-training.sqlite
             data/training/holdout-report.json
+            data/training/model-search-report.json
           if-no-files-found: error
           retention-days: 14
