@@ -69,6 +69,22 @@ def _estimator(method: str):
             StandardScaler(),
             LogisticRegression(max_iter=1000, C=0.5, random_state=2026),
         )
+    if method == "logit-shrink":
+        return make_pipeline(
+            SimpleImputer(strategy="median", keep_empty_features=True),
+            StandardScaler(),
+            LogisticRegression(max_iter=1000, C=0.05, random_state=2026),
+        )
+    if method in {"gbm-shallow", "gbm-regularized"}:
+        if method == "gbm-shallow":
+            leaves, leaf, l2, iterations = 4, 24, 8.0, 55
+        else:
+            leaves, leaf, l2, iterations = 7, 35, 25.0, 55
+        return HistGradientBoostingClassifier(
+            max_iter=iterations, max_leaf_nodes=leaves,
+            min_samples_leaf=leaf, learning_rate=0.05,
+            l2_regularization=l2, random_state=2026,
+        )
     if method == "gbm":
         return HistGradientBoostingClassifier(
             max_iter=80, max_leaf_nodes=7, min_samples_leaf=12,
@@ -116,7 +132,10 @@ def evaluate_season(
     db: sqlite3.Connection, season: int, *, method: str
 ) -> SeasonScore:
     """Report honest holdout metrics; no same-round or future-race labels."""
-    if method not in {"form", "logit", "gbm", "logit-qual", "gbm-qual", "pole"}:
+    if method not in {
+        "form", "logit", "gbm", "logit-qual", "gbm-qual", "pole",
+        "gbm-shallow-qual", "gbm-regularized-qual", "logit-shrink-qual",
+    }:
         raise ValueError("unsupported method")
     qualify = method.endswith("-qual") or method == "pole"
     qualifying_index = qualifying_feature_index(db) if qualify else {}
