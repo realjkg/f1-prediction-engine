@@ -277,7 +277,7 @@ class TrainingStore:
                             ("dataset_digest", "model_revision", "season", "round",
                              "model_id", "driver_id", "win_probability",
                              "podium_probability"),
-                            (digest, model_revision, race.season, race.round,
+                            (digest, model_revision, race.season, race.round_number,
                              model_id, driver_id, win[driver_id], podium[driver_id]),
                             ("dataset_digest", "model_revision", "season", "round",
                              "model_id", "driver_id"),
