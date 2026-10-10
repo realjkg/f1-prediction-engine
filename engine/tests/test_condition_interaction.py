@@ -62,6 +62,7 @@ def test_weather_does_not_determine_winner() -> None:
         strong, candidate_strength=1.0,
     )
     assert wet.winner["driver-b"] > BASE["driver-b"]
+    # Wet experience changes the probability without forcing a winner.
     assert wet.winner["driver-a"] > wet.winner["driver-b"]
     assert sum(wet.winner.values()) == pytest.approx(1.0)
     dry = conditional_winner_distribution(
