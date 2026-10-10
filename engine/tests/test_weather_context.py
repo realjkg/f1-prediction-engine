@@ -137,3 +137,34 @@ def test_weather_is_driver_experience_modifier_not_race_determinant(
     assert wet_likely.forecast_weighted_classification_rate != pytest.approx(
         forecast().rain_probability
     )
+
+
+def test_wet_weather_affects_driver_racecraft_relative_to_own_history(
+    mini_snapshot: Path, tmp_path: Path
+) -> None:
+    path = tmp_path / "f1.sqlite"
+    build_training_store([mini_snapshot], path, as_of=date(2022, 1, 1))
+    cutoff = datetime(2021, 6, 29, tzinfo=UTC)
+    history = [observed(1, True), observed(2, False)]
+    with sqlite3.connect(path) as db:
+        # Prior wet race: loses two places; prior dry race: holds position.
+        # Both races finished, so completion reliability remains unchanged.
+        db.execute(
+            "UPDATE results SET position=3 "
+            "WHERE season=2021 AND round=1 AND driver_id='test-driver'"
+        )
+        wet_likely = prior_weather_reliability(
+            db, "test-driver", history, forecast(), prediction_cutoff=cutoff,
+            minimum_per_condition=1,
+        )
+        dry_likely = prior_weather_reliability(
+            db, "test-driver", history, replace(forecast(), rain_probability=0.2),
+            prediction_cutoff=cutoff, minimum_per_condition=1,
+        )
+    assert wet_likely.driver_baseline_positions_gained == pytest.approx(-1)
+    assert wet_likely.wet_positions_gained == pytest.approx(-2)
+    assert wet_likely.dry_positions_gained == pytest.approx(0)
+    assert wet_likely.forecast_positions_gained_modifier == pytest.approx(-0.12)
+    assert wet_likely.forecast_weighted_positions_gained == pytest.approx(-1.12)
+    assert dry_likely.forecast_weighted_positions_gained == pytest.approx(-0.88)
+    assert wet_likely.forecast_weighted_classification_rate == pytest.approx(1.0)
