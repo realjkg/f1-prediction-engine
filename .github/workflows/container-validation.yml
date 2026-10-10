@@ -1,0 +1,40 @@
+name: Container Integration Smoke
+
+on:
+  pull_request:
+    paths:
+      - "compose.yaml"
+      - ".dockerignore"
+      - "deploy/**"
+      - "engine/**"
+      - "scripts/**"
+      - "web/**"
+      - "data/snapshot/**"
+      - ".github/workflows/container-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  container-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Build and start real production containers
+        run: docker compose up -d --build --wait --wait-timeout 360 engine web
+      - name: Check the production HTTP proxy and engine response
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8080/ > /tmp/home.html
+          grep -q "<div id=\"root\">" /tmp/home.html
+          curl --fail --silent --show-error http://127.0.0.1:8080/api/config > /tmp/config.json
+          python3 -c "import json; config=json.load(open('/tmp/config.json')); assert 'datasetVersion' in config, config"
+          if curl -fsS http://127.0.0.1:8080/metrics; then
+            echo "Metrics were unexpectedly public"; exit 1
+          fi
+      - name: Compose diagnostics on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=150
+      - name: Clean integration volumes
+        if: always()
+        run: docker compose down --volumes --remove-orphans

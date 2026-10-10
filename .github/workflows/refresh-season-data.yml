@@ -1,0 +1,71 @@
+name: Refresh 2025-2026 F1 Training Data
+
+on:
+  pull_request:
+    paths:
+      - "scripts/refresh-data.py"
+      - "scripts/build-training-store.py"
+      - "engine/f1engine/training_store.py"
+      - "engine/tests/test_training_store.py"
+      - ".github/workflows/refresh-season-data.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "17 8 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  season-data:
+    name: Verify new season results and build training DB
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - name: Install hash-verified Python dependencies
+        run: python3 -m pip install --require-hashes -r engine/requirements.lock.txt
+      - name: Select cutoff (October 10 acceptance, latest UTC day on schedule)
+        env:
+          GH_EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$GH_EVENT" = "pull_request" ]; then
+            echo "AS_OF=2026-10-11" >> "$GITHUB_ENV"
+          else
+            echo "AS_OF=$(date -u -d tomorrow +%F)" >> "$GITHUB_ENV"
+          fi
+      - name: Refresh all 2025 results and completed 2026 sessions
+        run: |
+          python3 scripts/refresh-data.py \
+            --seasons 2025-2026 \
+            --as-of "$AS_OF" \
+            --dataset-id "2025-2026-through-$AS_OF" \
+            --data-dir data/snapshot-2025-2026 \
+            --cache-dir .cache/jolpica \
+            --budget 500
+      - name: Verify provenance and build point-in-time training store
+        run: |
+          python3 scripts/build-training-store.py \
+            --snapshot data/snapshot \
+            --snapshot data/snapshot-2025-2026 \
+            --as-of "$AS_OF" \
+            --output data/training/f1-training.sqlite
+          cp data/snapshot/DATA_LICENSE.md data/snapshot-2025-2026/DATA_LICENSE.md
+      - name: Benchmark warehouse-trained models out of sample
+        run: |
+          python3 scripts/benchmark-training-store.py \
+            --store data/training/f1-training.sqlite \
+            --season 2025 --season 2026 \
+            --report data/training/holdout-report.json
+      - name: Upload verified training artifact (not an unreviewed repo commit)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: f1-2025-2026-verified-data
+          path: |
+            data/snapshot-2025-2026/
+            data/training/f1-training.sqlite
+            data/training/holdout-report.json
+          if-no-files-found: error
+          retention-days: 14

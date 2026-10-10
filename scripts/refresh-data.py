@@ -472,20 +472,33 @@ def fetch_season(
     schedule_races, fetched_at = fetch_paginated_races(client, f"{season}.json")
     if not schedule_races:
         raise UnexpectedShape(f"empty schedule for season {season}")
-    # Exclude same-day races: the source may publish a classification during
-    # the day, and a racing forecast must not train on that race's outcome.
-    if as_of is not None:
-        schedule_races = [
-            race for race in schedule_races
-            if date.fromisoformat(race["date"]) < as_of
-        ]
-
     results_by_round: dict[int, list[dict]] = {}
     qualifying_by_round: dict[int, list[dict]] = {}
     sprints_by_round: dict[int, list[dict]] = {}
 
     for race in schedule_races:
+        # For an in-progress season, retain the schedule but refuse to ingest
+        # outcomes from the cutoff date or later. A date-only source cannot
+        # establish that same-day results were available at forecast time.
         round_number = int(race["round"])
+        if as_of is not None and date.fromisoformat(race["date"]) >= as_of:
+            # A race can still be upcoming while qualifying or its sprint has
+            # already finished. Keep those observed pre-race facts, but never
+            # mistake them for the Grand Prix result.
+            for session_name, path_name, inner_key, target in (
+                ("Qualifying", "qualifying", "QualifyingResults", qualifying_by_round),
+                ("Sprint", "sprint", "SprintResults", sprints_by_round),
+            ):
+                session = race.get(session_name)
+                if not session or date.fromisoformat(session["date"]) >= as_of:
+                    continue
+                observed, observed_at = fetch_round_rows(
+                    client, f"{season}/{round_number}/{path_name}.json", inner_key
+                )
+                fetched_at = max(fetched_at, observed_at)
+                if observed:
+                    target[round_number] = observed
+            continue
         results_block, results_at = fetch_round_rows(
             client, f"{season}/{round_number}/results.json", "Results"
         )
@@ -779,7 +792,12 @@ def build_provenance(
             },
         ],
         "dataLimitations": DATA_LIMITATIONS + (
-            [f"snapshot includes only races dated strictly before {as_of.isoformat()}"]
+            [
+                (
+                    "race results include only races dated strictly before "
+                    f"{as_of.isoformat()}"
+                )
+            ]
             if as_of else []
         ),
     }
@@ -893,6 +911,11 @@ def main(argv: list[str] | None = None) -> int:
     seasons = parse_seasons(args.seasons)
     data_dir = Path(args.data_dir)
     cache_dir = Path(args.cache_dir)
+    as_of = args.as_of
+    if max(seasons) >= 2025 and data_dir == Path("data/snapshot"):
+        parser.error("current-era seasons require --data-dir separate from the certified 2020–2024 baseline")
+    if max(seasons) >= 2026 and as_of is None:
+        parser.error("2026 refresh requires an explicit --as-of cutoff")
 
     try:
         summary = run_refresh(
@@ -903,7 +926,7 @@ def main(argv: list[str] | None = None) -> int:
             dataset_id=args.dataset_id,
             min_interval=args.min_interval,
             budget=args.budget,
-            as_of=args.as_of,
+            as_of=as_of,
             fresh_seasons=set(parse_seasons(args.fresh_seasons)) if args.fresh_seasons else set(),
         )
     except BudgetExhausted as error:

@@ -179,9 +179,15 @@ def test_as_of_excludes_same_day_and_future_rounds(refresh, tmp_path: Path) -> N
     assert summary["requestsMade"] == 4  # schedule + round 1 result, grid, sprint
     assert not any("/2021/2/" in url for url in fake.request_urls)
     dataset = load_snapshot(tmp_path / "data")
-    assert [(race.season, race.round) for race in dataset.races] == [(2021, 1)]
+    assert [(race.season, race.round) for race in dataset.races] == [
+        (2021, 1),
+        (2021, 2),
+    ]
+    assert {(result.season, result.round) for result in dataset.results} == {(2021, 1)}
     assert dataset.provenance.snapshot.asOfDate == "2021-05-30"
-    assert "strictly before 2021-05-30" in dataset.limitations[-1]
+    assert "race results include only races dated strictly before 2021-05-30" in (
+        dataset.limitations[-1]
+    )
 
 
 def test_current_season_revalidates_cache(refresh, tmp_path: Path) -> None:
@@ -207,3 +213,68 @@ def test_current_season_revalidates_cache(refresh, tmp_path: Path) -> None:
     assert second["requestsMade"] == 6
     assert len(fake.request_urls) == 6
     assert first["datasetSha256"] == second["datasetSha256"]
+
+
+def test_partial_season_keeps_schedule_without_future_results(
+    refresh, tmp_path: Path
+) -> None:
+    """Cutoff hides future-race outcomes even if the fake API exposes them."""
+    from datetime import date
+
+    calls: list[str] = []
+    result = refresh.run_refresh(
+        seasons=[2021],
+        data_dir=tmp_path / "partial",
+        cache_dir=tmp_path / "cache",
+        base_url=BASE_URL,
+        dataset_id="partial.2026.10",
+        min_interval=0,
+        budget=500,
+        as_of=date(2021, 5, 15),
+        fetch_fn=_counting_fetch(refresh, calls),
+        sleep_fn=lambda _seconds: None,
+    )
+    dataset = load_snapshot(tmp_path / "partial")
+    assert len(dataset.races) == 2  # schedule is retained
+    assert len(dataset.results) == 3  # only completed round 1
+    assert len(dataset.qualifying) == 3
+    assert result["tables"]["races"] == 2
+    assert not any("/2021/2/results.json" in url for url in calls)
+    assert not any("/2021/2/qualifying.json" in url for url in calls)
+
+
+def test_partial_season_captures_qualifying_before_upcoming_gp(
+    refresh, tmp_path: Path
+) -> None:
+    """The upcoming race has no outcome but may have a known pre-race grid."""
+    from datetime import date
+
+    fake = make_fake_jolpica(refresh)
+
+    def with_qualifying_schedule(url: str):
+        response = fake.fetch_fn(url)
+        if "/2021.json?" not in url:
+            return response
+        payload = json.loads(response.body.decode("utf-8"))
+        payload["MRData"]["RaceTable"]["Races"][1]["Qualifying"] = {
+            "date": "2021-05-14"
+        }
+        return refresh.HttpResponse(
+            status=200, headers={}, body=json.dumps(payload).encode("utf-8")
+        )
+
+    refresh.run_refresh(
+        seasons=[2021],
+        data_dir=tmp_path / "partial",
+        cache_dir=tmp_path / "cache",
+        base_url=BASE_URL,
+        dataset_id="partial.2026.10",
+        min_interval=0,
+        budget=500,
+        as_of=date(2021, 5, 15),
+        fetch_fn=with_qualifying_schedule,
+        sleep_fn=lambda _seconds: None,
+    )
+    dataset = load_snapshot(tmp_path / "partial")
+    assert {r.round for r in dataset.qualifying} == {1, 2}
+    assert {r.round for r in dataset.results} == {1}
