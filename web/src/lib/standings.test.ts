@@ -1,25 +1,96 @@
 import { describe, expect, it } from "vitest";
-import { CALL_SHEETS } from "../fixtures/callsheets";
-import { RECORDS_BY_RACE_ID } from "../fixtures/records";
 import { emptyRecord } from "./pitwall";
-import { podiumCall } from "./scoring";
+import { podiumCall } from "./calls";
 import {
   COMPETITORS,
   COMPETITOR_NAMES,
-  latestNearMiss,
-  nearMiss,
+  callForCompetitor,
+  playerLeadsEnsemble,
   playedRounds,
   seasonStandings,
+  type RoundCompetitorScores,
 } from "./standings";
-import type { PitWallRecord } from "../types";
+import type {
+  ConsensusFlag,
+  PitWallRecord,
+  PredictionRecord,
+  ProbabilityMap,
+  RoundCall,
+  RoundScoreSummary,
+} from "../types";
 
-const PERFECT_CALL = (() => {
-  const order = CALL_SHEETS["austrian-gp"].finishingOrder;
-  return { p1: order[0], p2: order[1], p3: order[2] };
-})();
+/** A player summary: all three picks position-exact, winner bonus included. */
+function perfectSummary(over: Partial<RoundScoreSummary> = {}): RoundScoreSummary {
+  return {
+    positionExactCount: 3,
+    winnerBonus: true,
+    nearMissCount: 0,
+    basePoints: 18,
+    consensusFlag: "OK",
+    coinFlip: false,
+    totalPoints: 18,
+    ...over,
+  };
+}
 
-function recordWithCalls(calls: PitWallRecord["calls"]): PitWallRecord {
-  return { ...emptyRecord(), calls };
+/** A model/ensemble summary — never the player's numbers. */
+function competitorSummary(totalPoints: number, flag: ConsensusFlag = "OK"): RoundScoreSummary {
+  return {
+    positionExactCount: 1,
+    winnerBonus: false,
+    nearMissCount: 1,
+    basePoints: 6,
+    consensusFlag: flag,
+    coinFlip: flag === "LOW_CONSENSUS",
+    totalPoints,
+  };
+}
+
+function recordWithRound(
+  raceKey: string,
+  scores: Partial<RoundCompetitorScores> = {},
+): PitWallRecord {
+  const full: RoundCompetitorScores = {
+    you: perfectSummary(),
+    "m1-gbm": competitorSummary(12),
+    "m2-logit": competitorSummary(9),
+    "m3-form": competitorSummary(7),
+    ensemble: competitorSummary(11),
+  };
+  const record = emptyRecord();
+  record.roundScores[raceKey] = { ...full, ...scores };
+  return record;
+}
+
+/** A minimal-but-valid prediction record for callForCompetitor derivations. */
+function recordWithDistributions(
+  winner: ProbabilityMap,
+  podium: ProbabilityMap,
+): PredictionRecord {
+  const models = {
+    "m1-gbm": { winner, podium },
+  } as PredictionRecord["models"];
+  return {
+    schemaVersion: 1,
+    recordType: "prediction",
+    predictionId: "2024-r1-test",
+    race: { season: 2024, round: 1, raceId: "test-gp", name: "Test Grand Prix" },
+    generatedAt: "2024-01-01T00:00:00Z",
+    dataset: { id: "test", sha256: "0".repeat(64) },
+    evidenceBasis: "test",
+    models,
+    ensemble: {
+      raceId: "2024-r1-test",
+      winner,
+      podium,
+      consensus: { podiumSpread: 0.01, flag: "OK" },
+      weightsUsed: { "m1-gbm": 1, "m2-logit": 0, "m3-form": 0 },
+    },
+    advisoryOnly: true,
+    dataLimitations: [],
+    prevRecordSha256: null,
+    recordSha256: "1".repeat(64),
+  } as PredictionRecord;
 }
 
 describe("seasonStandings", () => {
@@ -31,73 +102,91 @@ describe("seasonStandings", () => {
       expect(entry.roundsPlayed).toBe(0);
       expect(entry.exactHitRate).toBeNull();
     }
-    // The player has no distribution, so no Brier score.
-    expect(standings.find((e) => e.competitorId === "you")?.meanBrier).toBeNull();
   });
 
-  it("scores the player's perfect call at the top of the table", () => {
-    const flag = RECORDS_BY_RACE_ID["austrian-gp"].ensemble.consensus.flag;
-    const expected = flag === "LOW_CONSENSUS" ? 36 : 18;
-    const standings = seasonStandings(recordWithCalls({ "austrian-gp": PERFECT_CALL }));
+  it("sums stored engine summaries per competitor over played rounds", () => {
+    const record = recordWithRound("2024-r1-a");
+    // A second round where the ensemble scores 20 — the sum must span rounds.
+    record.roundScores["2024-r2-b"] = {
+      ...record.roundScores["2024-r1-a"],
+      ensemble: competitorSummary(20),
+    };
+    const standings = seasonStandings(record);
+    const ensemble = standings.find((e) => e.competitorId === "ensemble");
+    expect(ensemble?.points).toBe(11 + 20);
+    expect(ensemble?.roundsPlayed).toBe(2);
+    expect(ensemble?.exactHitRate).toBe(0); // never all-three-exact in these fixtures
+  });
+
+  it("ranks a perfect player round at the top", () => {
+    const standings = seasonStandings(recordWithRound("2024-r1-a"));
     const you = standings.find((e) => e.competitorId === "you");
-    expect(you?.points).toBe(expected);
+    expect(you?.points).toBe(18);
     expect(you?.roundsPlayed).toBe(1);
     expect(you?.exactHitRate).toBe(1);
     expect(standings[0].competitorId).toBe("you");
   });
 
-  it("scores every model and the ensemble alongside the player", () => {
-    const standings = seasonStandings(recordWithCalls({ "austrian-gp": PERFECT_CALL }));
-    // Output is rank-ordered by points; every competitor appears exactly once.
-    expect(standings.map((e) => e.competitorId).sort()).toEqual([...COMPETITORS].sort());
-    for (const entry of standings) {
-      expect(entry.roundsPlayed).toBe(1);
-      if (entry.competitorId !== "you") {
-        expect(entry.meanBrier).not.toBeNull();
-      }
-    }
+  it("skips rounds where a competitor has no stored summary", () => {
+    const record = recordWithRound("2024-r1-a", { "m3-form": undefined });
+    const form = seasonStandings(record).find((e) => e.competitorId === "m3-form");
+    expect(form?.roundsPlayed).toBe(0);
+    expect(form?.points).toBe(0);
   });
 });
 
-describe("nearMiss", () => {
-  it("names a P4 pick and whether the ensemble knew", () => {
-    // Hamilton finished P4 in the Austrian fixture — picked into slot 3.
-    const call = { ...PERFECT_CALL, p3: "44-ham" };
-    const feedback = nearMiss("austrian-gp", call);
-    expect(feedback).not.toBeNull();
-    expect(feedback?.driverId).toBe("44-ham");
-    expect(feedback?.pickedSlot).toBe(3);
-    const ensemblePodium = podiumCall(RECORDS_BY_RACE_ID["austrian-gp"].ensemble.podium);
-    expect(feedback?.ensembleKnew).toBe(
-      [ensemblePodium?.p1, ensemblePodium?.p2, ensemblePodium?.p3].includes("44-ham"),
+describe("playedRounds", () => {
+  it("lists played rounds with the engine-served consensus flag", () => {
+    const played = playedRounds(
+      recordWithRound("2024-r1-a", {
+        you: perfectSummary({ consensusFlag: "LOW_CONSENSUS", coinFlip: true, totalPoints: 36 }),
+      }),
     );
+    expect(played).toEqual([{ raceKey: "2024-r1-a", flag: "LOW_CONSENSUS" }]);
   });
 
-  it("returns null when no pick finished P4", () => {
-    expect(nearMiss("austrian-gp", PERFECT_CALL)).toBeNull();
+  it("reports a null flag when no player summary exists", () => {
+    const played = playedRounds(recordWithRound("2024-r1-a", { you: undefined }));
+    expect(played).toEqual([{ raceKey: "2024-r1-a", flag: null }]);
   });
 });
 
-describe("playedRounds / latestNearMiss", () => {
-  it("lists played rounds with their consensus flag", () => {
-    const played = playedRounds(recordWithCalls({ "austrian-gp": PERFECT_CALL }));
-    expect(played).toEqual([
-      {
-        raceId: "austrian-gp",
-        flag: RECORDS_BY_RACE_ID["austrian-gp"].ensemble.consensus.flag,
-      },
-    ]);
+describe("playerLeadsEnsemble", () => {
+  it("is false before any round", () => {
+    expect(playerLeadsEnsemble(emptyRecord())).toBe(false);
   });
 
-  it("finds the latest near miss across played rounds", () => {
-    const feedback = latestNearMiss(
-      recordWithCalls({ "austrian-gp": { ...PERFECT_CALL, p3: "44-ham" } }),
-    );
-    expect(feedback?.driverId).toBe("44-ham");
+  it("is true when the player's total beats the ensemble's", () => {
+    const record = recordWithRound("2024-r1-a", { ensemble: competitorSummary(2) });
+    expect(playerLeadsEnsemble(record)).toBe(true);
+  });
+});
+
+describe("callForCompetitor", () => {
+  const winner: ProbabilityMap = { "1-max": 0.5, "44-ham": 0.3, "4-nor": 0.2 };
+  const podium: ProbabilityMap = { "1-max": 0.8, "44-ham": 0.7, "4-nor": 0.6 };
+  const record = recordWithDistributions(winner, podium);
+  const playerCall: RoundCall = { p1: "44-ham", p2: "1-max", p3: "4-nor" };
+
+  it("returns the player's own lock unchanged", () => {
+    expect(callForCompetitor(record, "you", playerCall)).toEqual(playerCall);
   });
 
-  it("returns null without any near miss", () => {
-    expect(latestNearMiss(recordWithCalls({ "austrian-gp": PERFECT_CALL }))).toBeNull();
+  it("derives model and ensemble calls from the podium distribution", () => {
+    expect(callForCompetitor(record, "m1-gbm", null)).toEqual({ p1: "1-max", p2: "44-ham", p3: "4-nor" });
+    expect(callForCompetitor(record, "ensemble", null)).toEqual({ p1: "1-max", p2: "44-ham", p3: "4-nor" });
+  });
+
+  it("returns null when a distribution cannot name three drivers", () => {
+    const thin = recordWithDistributions({ "1-max": 1 }, { "1-max": 1 });
+    expect(callForCompetitor(thin, "m1-gbm", null)).toBeNull();
+  });
+});
+
+describe("podiumCall (display derivation)", () => {
+  it("takes the top three with descending-probability, id tie-break", () => {
+    const call = podiumCall({ "4-nor": 0.3, "1-max": 0.3, "44-ham": 0.9, "5-alb": 0.1 });
+    expect(call).toEqual({ p1: "44-ham", p2: "1-max", p3: "4-nor" });
   });
 });
 
