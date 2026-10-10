@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import replace
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -15,8 +15,6 @@ from f1engine.weather_context import (
     PreRaceForecast,
     prior_weather_reliability,
 )
-
-UTC = timezone.utc
 
 
 def forecast() -> PreRaceForecast:
