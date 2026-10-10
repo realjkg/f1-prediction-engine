@@ -216,6 +216,9 @@ def run_demo(
         # function of the snapshot, so a re-run reproduces the same bytes
         # rather than accreting a second chain (determinism gate).
         ledger_path.unlink()
+    # The served API reads this same path (DEFAULT_LEDGER_PATH) — create the
+    # parent so the first run's appends land where the demo will serve from.
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
     dataset = verify(data_dir)
     _log("predict", f"expanding-window predictions for {season}, per-model + ensemble, into the ledger")
     result = predict_and_prove(dataset, ledger_path, season)
@@ -237,7 +240,7 @@ def run_demo(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the F1 prediction demo pipeline.")
     parser.add_argument("--data-dir", type=Path, default=Path("data/snapshot"))
-    parser.add_argument("--ledger", type=Path, default=Path("data/ledger.jsonl"))
+    parser.add_argument("--ledger", type=Path, default=Path("data/evidence/ledger.jsonl"))
     parser.add_argument("--season", type=int, default=TARGET_SEASON)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--host", default="127.0.0.1")
