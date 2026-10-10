@@ -9,9 +9,9 @@ estimates. Nothing calls it in the serving path until a challenger qualifies.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from collections.abc import Mapping
 
 
 class ConditionEvidenceError(ValueError):
