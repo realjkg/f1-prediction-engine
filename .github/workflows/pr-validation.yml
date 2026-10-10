@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.12"
+      - name: Check U.S. English in authored documentation
+        run: python3 scripts/check-us-english.py
       - name: Install engine from lock (hash-verified)
         # Locks are the source of truth (pip-compile --generate-hashes); CI never
         # re-resolves ranges, so builds are reproducible and pip-audit results are
