@@ -1,4 +1,5 @@
 import { StrictMode } from "react";
+import { Capacitor } from "@capacitor/core";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./styles.css";
@@ -15,7 +16,7 @@ createRoot(rootElement).render(
 );
 
 // Installable PWA: register the service worker in production builds only.
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
+if (import.meta.env.PROD && !Capacitor.isNativePlatform() && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch((error: unknown) => {
       console.warn("[f1-prediction] service worker registration failed:", error);

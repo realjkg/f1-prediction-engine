@@ -275,4 +275,8 @@ export function isEngineErrorCode(code: string): code is EngineErrorCode {
 }
 
 /** The default singleton — screens import hooks, not this. */
-export const engineClient: EngineClient = createEngineClient();
+// Native Capacitor builds require an explicit HTTPS origin; no loopback or
+// development-server fallback is suitable on real iOS/Android devices.
+// Web container builds omit the variable to use the Nginx same-origin proxy.
+const backendUrl = import.meta.env.VITE_F1E_API_BASE_URL?.trim() ?? "";
+export const engineClient: EngineClient = createEngineClient(undefined, backendUrl);
