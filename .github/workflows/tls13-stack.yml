@@ -1,0 +1,27 @@
+name: Secure TLS 1.3 Stack Smoke
+
+on:
+  pull_request:
+    paths:
+      - "compose.tls.yaml"
+      - "deploy/nginx-tls.conf"
+      - "deploy/engine-entrypoint.sh"
+      - "scripts/serve-tls13.py"
+      - "scripts/test-secure-stack.sh"
+      - ".github/workflows/tls13-stack.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tls13-mtls-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Verify real TLS 1.3 ingress, backend mutual TLS and downgrade refusal
+        run: bash scripts/test-secure-stack.sh
+      - name: Diagnostics on failure
+        if: failure()
+        run: docker compose -f compose.tls.yaml logs --no-color --tail=150 || true
