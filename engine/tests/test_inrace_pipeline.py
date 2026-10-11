@@ -7,18 +7,18 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from f1engine.app import ApiSettings, create_app
 from f1engine.inrace_evaluation import FrozenEvaluationCase, evaluate_frozen_cases
 from f1engine.inrace_pipeline import (
-    read_fusion_artifacts,
-    write_fusion_artifacts,
     ArtifactTampered,
     build_run_artifact,
     project_and_record,
+    read_fusion_artifacts,
     read_run_artifact,
+    write_fusion_artifacts,
 )
 from f1engine.lap_trace import LapTraceError
 from f1engine.live_prior import PreRacePrior, PriorEvidenceError, combine_prerace_and_lap
