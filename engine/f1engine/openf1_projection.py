@@ -46,7 +46,9 @@ def _completed_lap(row: Mapping[str, object]) -> datetime | None:
     return _time(start) + timedelta(seconds=duration)
 
 
-def _event_time(topic: str, row: Mapping[str, object], captured: datetime | None) -> datetime | None:
+def _event_time(
+    topic: str, row: Mapping[str, object], captured: datetime | None,
+) -> datetime | None:
     if topic == "laps":
         return _completed_lap(row)
     if row.get("date") is not None:
@@ -56,7 +58,9 @@ def _event_time(topic: str, row: Mapping[str, object], captured: datetime | None
     return captured
 
 
-def _rows(bundle: Mapping[str, object], cutoff: datetime, session_key: int) -> dict[str, list[tuple[datetime, dict[str, object]]]]:
+def _rows(
+    bundle: Mapping[str, object], cutoff: datetime, session_key: int,
+) -> dict[str, list[tuple[datetime, dict[str, object]]]]:
     raw = bundle.get("events")
     if not isinstance(raw, dict) or set(raw) - TOPICS:
         raise LapTraceError("only allowlisted OpenF1 source event collections are accepted")
@@ -220,7 +224,11 @@ def project_lap_checkpoint(
             gap = 0.0
         else:
             value = latest_gaps.get(car)
-            gap = value[1] if value is not None and cutoff - value[0] <= timedelta(seconds=45) else None
+            gap = (
+                value[1]
+                if value is not None and cutoff - value[0] <= timedelta(seconds=45)
+                else None
+            )
             if gap is None:
                 unavailable.add("gap_to_leader_seconds")
         records = sorted(lap_history[car], key=lambda item: item[1])
