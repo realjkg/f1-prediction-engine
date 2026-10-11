@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from fastapi.testclient import TestClient
 
 from f1engine.app import ApiSettings, create_app
+from f1engine.inrace_evaluation import FrozenEvaluationCase, evaluate_frozen_cases
 from f1engine.inrace_pipeline import (
     read_fusion_artifacts,
     write_fusion_artifacts,
@@ -232,3 +233,34 @@ def test_api_joins_only_verifiable_prior_and_lap_artifacts(
     refused = client.get("/api/races/singapore/lap-fusion?season=2026&lap=5")
     assert refused.status_code == 503
     assert refused.json()["detail"]["code"] == "ARTIFACT_TAMPERED"
+
+
+def test_paired_scoring_requires_frozen_result_after_lap(tmp_path: Path):
+    record, artifact = replay(tmp_path)
+    assert artifact.scenario is not None
+    combined = combine_prerace_and_lap(
+        prior(), record, artifact.scenario, green_scenario_weight=.4
+    )
+    case = FrozenEvaluationCase(
+        season=2026, race_id="singapore", lap=5, observed_at=CUTOFF,
+        result_published_at=CUTOFF+timedelta(hours=2),
+        winner_driver_number=1,
+        initial_prior=prior().driver_win_probabilities,
+        scenario=artifact.scenario, combined=combined,
+    )
+    scores = evaluate_frozen_cases([case])
+    assert set(scores) == {
+        "pre-race", "running-order",
+        "green-continuation", "research-combination",
+    }
+    assert all(score.races == 1 and score.checkpoints == 1 for score in scores.values())
+    assert scores["pre-race"].winner_hit_rate == 1
+    assert scores["pre-race"].mean_multiclass_brier == pytest.approx(.18)
+    assert scores["research-combination"].mean_multiclass_brier >= 0
+    with pytest.raises(ValueError, match="duplicate"):
+        evaluate_frozen_cases([case, case])
+    with pytest.raises(ValueError, match="result timestamp"):
+        evaluate_frozen_cases([case.__class__(**{
+            **vars(case),
+            "result_published_at": CUTOFF - timedelta(seconds=1),
+        })])
