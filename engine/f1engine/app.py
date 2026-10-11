@@ -65,6 +65,7 @@ from f1engine.evidence import (
     verify_chain,
 )
 from f1engine.ingestion import PinnedDataset, load_snapshot
+from f1engine.lap_trace import LapTraceError, LapTraceRecord, get_lap_observation
 from f1engine.observability import EventStatus, Signal
 from f1engine.scoring import CallScore, PitCall, score_call_sheet
 from f1engine.wire import WireModel
@@ -98,6 +99,7 @@ class ApiSettings:
 
     data_dir: Path = Path("data/snapshot")
     ledger_path: Path = Path(DEFAULT_LEDGER_PATH)
+    lap_trace_path: Path | None = None
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
     brief_mode: Literal["fixture", "live"] = "fixture"
 
@@ -114,6 +116,8 @@ class ApiSettings:
         return cls(
             data_dir=Path(environ.get("F1E_DATA_DIR", "data/snapshot")),
             ledger_path=Path(environ.get("F1E_LEDGER_PATH", DEFAULT_LEDGER_PATH)),
+            lap_trace_path=Path(environ["F1E_LAP_TRACE_PATH"])
+            if environ.get("F1E_LAP_TRACE_PATH") else None,
             cors_origins=origins,
             brief_mode=_brief_mode(environ.get("F1E_BRIEF_MODE")),
         )
@@ -642,6 +646,36 @@ def create_app(
                 f"no prediction records for {race_id!r} in the ledger",
             )
         return PredictionsView(predictions=records, total=len(records))
+
+    @app.get("/api/races/{race_id}/lap-trace")
+    def race_lap_trace(
+        race_id: str,
+        season: Annotated[int, Query(ge=1950, le=2100)],
+        lap: Annotated[int | None, Query(ge=1)] = None,
+    ) -> LapTraceRecord:
+        """Observe a recorded lap, never make an unsupported live forecast.
+
+        This opt-in trace is independent from the 2024 historical race catalog
+        because the pinned backtest and 2026 race-state feed are separate
+        evidence streams. Explicit season/session metadata are required.
+        """
+        if resolved.lap_trace_path is None:
+            raise _error(
+                503, "LAP_TRACE_UNAVAILABLE",
+                "No authorized race-state trace is configured; no live simulation",
+            )
+        try:
+            record = get_lap_observation(
+                resolved.lap_trace_path, season=season, race_id=race_id, lap=lap
+            )
+        except LapTraceError as error:
+            raise _error(503, error.code, str(error)) from error
+        if record is None:
+            raise _error(
+                404, "LAP_TRACE_NOT_FOUND",
+                "No verified lap evidence for the requested race and lap",
+            )
+        return record
 
     @app.get("/api/races/{race_id}/result")
     def race_result(

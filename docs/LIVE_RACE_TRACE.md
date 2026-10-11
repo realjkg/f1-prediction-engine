@@ -1,0 +1,122 @@
+# In-race source capture and lap replay — Phase 1
+
+**Status:** evidence and replay foundation implemented. No qualified in-race
+probability model, no automatic current-event snapshots, no active live
+subscription, and no live streaming UI. Do not call this a working lap-25
+Singapore finish simulation.
+
+## Transport choice
+
+Use **MQTT over TLS** from OpenF1 to our private collector, not from the web
+app. OpenF1's supposed WebSocket option is **MQTT-over-WebSocket**, so the
+application-layer messages, topic names and broker semantics are identical.
+The backend is the only holder of OpenF1 credentials. Do not expose tokens
+in the browser or native app.
+
+- Upstream endpoint: `mqtt.openf1.org:8883`, **native MQTT over TLS 1.3 or newer only**. The collector sets an SSL context minimum of TLS 1.3, verifies the public CA chain and broker hostname, and never enables `tls_insecure_set(True)`. **A TLS 1.2-only broker or runtime fails closed**, rather than triggering protocol downgrade or switching to WSS. OpenF1 documents MQTTS, but does not publish a guaranteed TLS 1.3 minimum. A real TLS 1.3 handshake and provider account test must be recorded before declaring compatibility.
+- Permitlisted topics: `v1/position`, `v1/intervals`, `v1/laps`,
+  `v1/pit`, `v1/stints`, `v1/race_control`, `v1/weather`.
+- Subscriber QoS 0 minimizes overhead. Neither MQTT nor its QoS setting
+  guarantees a complete historical trace when disconnections occur.
+  Detect missing events and backfill using permitted historical REST access.
+- Deployment boundary: require TLS 1.3 where supported at externally exposed HTTPS/WSS ingress too, with trusted certificates, hostname checks, short-lived app sessions, origin/authorization checks, and no plaintext fallback. The current container's localhost HTTP is a loopback-only development interface, **not a public TLS endpoint**. The app has no public TLS termination or live WSS endpoint configured in this phase.
+- Later: a separate backend WebSocket broadcast can send validated state and
+  model revisions to mobile/React. No reason to give each app client direct
+  provider access or spend a subscription connection per device.
+- MQTT source record fields `_id` and `_key` distinguish ingestion order
+  and updates to the same document. Neither alone certifies a complete lap.
+- Licensed real-time data is subscription-gated, so credentials and rights
+  review are **required before using the live collector**.
+
+Provider documentation: https://openf1.org/auth.html and
+https://openf1.org/docs/ . Historical sessions from 2023 onward may be
+available via the public REST API; review data rights and usage terms before
+redistributing a dataset or using this in a commercial product.
+
+## Data path
+
+```text
+OpenF1 MQTT/TLS feed (authorized backend session)
+    -> topic-permitted, session-filtered raw event spool
+       timestamp + provider _id/_key + SHA-256(raw bytes)
+    -> eventual as-of lap projector [NOT YET IMPLEMENTED]
+       positions + intervals + laps + stops + stints + control + weather
+    -> LapCheckpoint schema (fail on missing leader, bad time or duplicates)
+    -> append-only chained lap trace (SHA-256 integrity)
+    -> GET /api/races/{raceId}/lap-trace?season=2026&lap=25
+       observed running order only; forecastStatus = not-qualified
+    -> eventual trained in-race model [NOT YET IMPLEMENTED]
+       prior + remaining-lap pace/risk + pit strategy + calibrated uncertainty
+```
+
+The source-spool and checkpoint paths are deliberately separate. Assembling
+a running order from messages observed at different times **can be wrong**,
+especially during pit cycles and safety cars. The projector must establish
+a reference lap boundary, verify each source field is from at/before that
+cutoff, resolve MQTT document revisions (`_id`, `_key`), and refuse missing
+coverage. Do not use race results or later timing to repair a live snapshot.
+
+The SHA-256 chain is **tamper evidence**, not a publisher signature or an
+authorization system. Additional signed supplier identity and access checks
+are needed before promising authenticity or multi-tenant use. Only one
+collector may write each trace file.
+
+## Run the offline replay
+
+A normalized checkpoint and its retained provider response are required.
+Do not treat example data as an actual Singapore race state.
+
+```bash
+python3 scripts/ingest-lap-checkpoint.py \
+  --checkpoint local/checkpoint-25.json \
+  --source-payload local/provider-response-25.json \
+  --trace data/live/singapore-2026.jsonl
+```
+
+The CLI confirms the declared source payload SHA-256, validates the complete
+normalized checkpoint, and appends one chained evidence record. To expose
+it in the FastAPI service, set `F1E_LAP_TRACE_PATH` to the resulting file
+and restart. The API refuses missing or tampered traces; latest live views
+also refuse stale data. Explicit past-lap replay remains accessible with
+its true recorded timestamp.
+
+### Optional licensed MQTT capture
+
+Install vetted `paho-mqtt` in a **separate collector environment**; it is not
+a production API dependency and no plaintext secrets belong in git. The
+OpenF1 token must be obtained and refreshed securely through the supported
+backend OAuth flow (an access token lasts about one hour).
+
+```bash
+export OPENF1_USER="<your-licensed-account>"
+export OPENF1_ACCESS_TOKEN="<short-lived-access-token>"
+python3 scripts/record-openf1-mqtt.py \
+  --session-key <verified-session-key> \
+  --rights-reference "<license-evidence-reference>" \
+  --output data/live/provider-events.jsonl \
+  --max-messages 10000
+```
+
+This collector requires TLS 1.3+ on the MQTT connection and rejects
+missing TLS 1.3 support without downgrade. No live connection or verified
+TLS 1.3 negotiation against the OpenF1 broker has been performed in CI.
+It stores original source payload text, SHA-256, provider event
+identity, and receive time. It never infers laps or writes win probabilities.
+The optional collector is **not active** until a licensed account and the
+optional dependency are provisioned. Logs never print tokens.
+
+## Next acceptance steps for Issue #31
+
+1. Obtain contractual permission and representative permitted OpenF1 session
+   archive(s). Confirm all fields and provider event time semantics.
+2. Write the as-of join/projector from the raw topic stream to fully qualified
+   lap checkpoints, with regression tests for missing events, out-of-order
+   updates, lap transitions, pit cycles and safety cars.
+3. Replay a documented historic lap (for Singapore, a verified lap-25/62
+   checkpoint if available) through the actual API and app, without assuming
+   later results.
+4. Train and compare in-race challengers against the **current running
+   position** baseline on earlier events, calibrate on held-out historical
+   races, then freeze forecasts prospectively.
+5. Add a read-only live page using server-broadcast state. No provider token
+   on the client. Show freshness, source provenance, lap number and data gaps.
