@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -264,3 +265,60 @@ def test_paired_scoring_requires_frozen_result_after_lap(tmp_path: Path):
             **vars(case),
             "result_published_at": CUTOFF - timedelta(seconds=1),
         })])
+
+
+def test_repeated_pit_messages_and_lap_revisions_do_not_inflate_evidence() -> None:
+    raw = json.loads(source_bundle())
+    events = raw["events"]
+    # Duplicate archived lap 4 should not displace the third distinct
+    # completed lap in the green-pace estimator.
+    events["laps"].append(dict(events["laps"][3]))
+    # The same pit stop is delivered twice (e.g. on reconnect).
+    pit = {
+        "session_key": 55001, "driver_number": 16, "lap_number": 3,
+        "date": (CUTOFF - timedelta(seconds=50)).isoformat(),
+    }
+    events["pit"] = [pit, dict(pit)]
+    checkpoint = project_lap_checkpoint(
+        json.dumps(raw).encode(), season=2026, race_id="singapore",
+        session_key=55001, lap=5, total_laps=62, cutoff=CUTOFF,
+        captured_at=CUTOFF + timedelta(seconds=2),
+        entrant_numbers=(1, 16), source_type="synthetic-fixture",
+        rights_evidence=None,
+    )
+    assert checkpoint.running_order[1].pit_stops == 1
+    assert len(checkpoint.running_order[0].recent_lap_seconds) == 3
+    assert len(checkpoint.running_order[1].recent_lap_seconds) == 3
+
+
+def test_mqtt_revised_document_uses_latest_available_revision_only() -> None:
+    raw = json.loads(source_bundle())
+    events = raw["events"]
+    pit = {
+        "session_key": 55001, "driver_number": 16, "lap_number": 3,
+        "date": (CUTOFF - timedelta(seconds=30)).isoformat(),
+        "_key": "one-pit", "_id": 4,
+    }
+    def wrapped(row: dict, sequence: int, received: datetime) -> dict:
+        original = dict(row, _id=sequence)
+        text = json.dumps(original)
+        return {
+            "topic": "v1/pit", "capturedAt": received.isoformat(),
+            "rawPayloadText": text,
+            "rawPayloadSha256": hashlib.sha256(text.encode()).hexdigest(),
+            "providerSequence": sequence, "providerKey": "one-pit",
+        }
+    events["pit"] = [
+        wrapped(pit, 4, CUTOFF - timedelta(seconds=20)),
+        wrapped(pit, 5, CUTOFF - timedelta(seconds=10)),
+        # This revision arrives after the cutoff and cannot change replay.
+        wrapped(pit, 6, CUTOFF + timedelta(seconds=10)),
+    ]
+    checkpoint = project_lap_checkpoint(
+        json.dumps(raw).encode(), season=2026, race_id="singapore",
+        session_key=55001, lap=5, total_laps=62, cutoff=CUTOFF,
+        captured_at=CUTOFF + timedelta(seconds=20),
+        entrant_numbers=(1, 16), source_type="synthetic-fixture",
+        rights_evidence=None,
+    )
+    assert checkpoint.running_order[1].pit_stops == 1
