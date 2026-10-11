@@ -23,6 +23,11 @@ from f1engine.lap_trace import (
     append_lap_checkpoint,
     verify_lap_trace,
 )
+from f1engine.live_prior import (
+    PreRacePrior,
+    UpdatedScenario,
+    combine_prerace_and_lap,
+)
 from f1engine.openf1_projection import project_lap_checkpoint
 from f1engine.race_simulator import (
     InRaceScenario,
@@ -198,3 +203,65 @@ def project_and_record(
     artifact = build_run_artifact(record, trials=trials)
     write_run_artifact(artifact_root, artifact)
     return record, artifact
+
+
+def write_fusion_artifacts(
+    root: Path, record: LapTraceRecord, artifact: InRaceRunArtifact,
+    prior: PreRacePrior, *, scenario_weight: float,
+) -> UpdatedScenario:
+    """Freeze original prior alongside the validated prior × scenario output."""
+    if artifact.scenario is None or artifact.checkpoint_sha256 != record.record_sha256:
+        raise ArtifactTampered("fusion requires matching available scenario evidence")
+    combined = combine_prerace_and_lap(
+        prior, record, artifact.scenario, green_scenario_weight=scenario_weight
+    )
+    base = _file_path(
+        root, season=artifact.season, race_id=artifact.race_id, lap=artifact.lap,
+        digest=record.record_sha256,
+    )
+    base.parent.mkdir(parents=True, exist_ok=True)
+    prior_path = base.with_suffix(".prior.json")
+    fusion_path = base.with_suffix(".fusion.json")
+    for path, value in (
+        (prior_path, prior.model_dump_json(by_alias=True) + "\n"),
+        (fusion_path, combined.model_dump_json(by_alias=True) + "\n"),
+    ):
+        try:
+            with path.open("x", encoding="utf-8") as stream:
+                stream.write(value)
+        except FileExistsError:
+            # Existing files must match exactly. Never overwrite frozen priors
+            # or tune weights in-place to match a subsequently known result.
+            if path.read_text(encoding="utf-8") != value:
+                raise ArtifactTampered("frozen prior/fusion artifact already differs")
+    return combined
+
+
+def read_fusion_artifacts(
+    root: Path, record: LapTraceRecord, artifact: InRaceRunArtifact,
+) -> UpdatedScenario | None:
+    """Recompute fusion from stored original prior to detect modified output."""
+    if artifact.scenario is None:
+        return None
+    base = _file_path(
+        root, season=record.checkpoint.season, race_id=record.checkpoint.race_id,
+        lap=record.checkpoint.lap, digest=record.record_sha256,
+    )
+    prior_path = base.with_suffix(".prior.json")
+    fusion_path = base.with_suffix(".fusion.json")
+    if not prior_path.exists() and not fusion_path.exists():
+        return None
+    if not prior_path.exists() or not fusion_path.exists():
+        raise ArtifactTampered("incomplete paired prior and fusion evidence")
+    try:
+        prior = PreRacePrior.model_validate_json(prior_path.read_text(encoding="utf-8"))
+        merged = UpdatedScenario.model_validate_json(fusion_path.read_text(encoding="utf-8"))
+        recomputed = combine_prerace_and_lap(
+            prior, record, artifact.scenario,
+            green_scenario_weight=merged.green_scenario_weight,
+        )
+    except (ValueError, OSError) as exc:
+        raise ArtifactTampered("prior/combined artifact source cannot be verified") from exc
+    if merged != recomputed:
+        raise ArtifactTampered("fusion artifact checksum or source identity mismatch")
+    return merged
