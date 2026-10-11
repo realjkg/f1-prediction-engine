@@ -45,6 +45,17 @@ describe("App shell (engine-backed)", () => {
     expect(await screen.findByText(/no simulation to show/i)).toBeTruthy();
   });
 
+  it("refuses to declare live release ready when supply chain and accuracy evidence are missing", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { name: "Pick a round" });
+    fireEvent.click(screen.getByRole("button", { name: "Inventory" }));
+    expect(await screen.findByRole("heading", { name: "Software inventory & release checks" })).toBeTruthy();
+    expect(await screen.findByText(/The inventory is unavailable until its generated artifact/)).toBeTruthy();
+    expect(screen.getByText(/Production live prediction: NOT QUALIFIED/)).toBeTruthy();
+    expect(screen.getByText("No verified evaluation report")).toBeTruthy();
+    expect(screen.getByText("Unavailable", { selector: ".supply-gate-state" })).toBeTruthy();
+  });
+
   it("carries the advisory evidence-basis banner from the served config", async () => {
     render(<App />);
     // briefMode "fixture" — the banner is the fixture variant, never hardcoded.
