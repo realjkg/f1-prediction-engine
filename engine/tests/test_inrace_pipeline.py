@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,13 +15,7 @@ from f1engine.inrace_pipeline import (
     project_and_record,
     read_run_artifact,
 )
-from f1engine.lap_trace import (
-    DriverOnTrack,
-    LapCheckpoint,
-    LapTraceRecord,
-    LapTraceError,
-    append_lap_checkpoint,
-)
+from f1engine.lap_trace import LapTraceError
 from f1engine.live_prior import PreRacePrior, PriorEvidenceError, combine_prerace_and_lap
 from f1engine.openf1_projection import project_lap_checkpoint
 from f1engine.race_simulator import ScenarioUnavailable, simulate_green_pace
