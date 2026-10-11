@@ -1,4 +1,5 @@
 import { driverCode, driverName } from "../lib/drivers";
+import { COMPETITOR_COLORS } from "../lib/colors";
 import { podiumCall, topPicks } from "../lib/calls";
 import type {
   BadgeId,
@@ -11,6 +12,7 @@ import type {
 import { ConsensusChip } from "./ConsensusChip";
 import { Confetti } from "./Confetti";
 import { ModelCard } from "./ModelCard";
+import { ReplayDots } from "./ReplayDots";
 import { RoundScoreCard } from "./RoundScoreCard";
 
 interface RevealViewProps {
@@ -90,10 +92,13 @@ export function RevealView({
         <ActualPodium result={result} />
       </section>
 
+      <ReplayDots distribution={record.ensemble.winner} actualWinnerId={result.podium[0]} />
+
       <div className="reveal-cards">
         <ModelCard
           title="Your call"
           highlight
+          accent={COMPETITOR_COLORS.you}
           call={call}
           winPick={null}
           landed={landed}
@@ -102,6 +107,7 @@ export function RevealView({
         <ModelCard
           title="Ensemble"
           subtitle="weighted blend"
+          accent={COMPETITOR_COLORS.ensemble}
           call={podiumCall(record.ensemble.podium)}
           winPick={topPicks(record.ensemble.winner, 1)[0] ?? null}
           landed={landed}
@@ -110,6 +116,7 @@ export function RevealView({
           <ModelCard
             key={modelId}
             title={modelId}
+            accent={COMPETITOR_COLORS[modelId]}
             call={podiumCall(record.models[modelId].podium)}
             winPick={topPicks(record.models[modelId].winner, 1)[0] ?? null}
             landed={landed}

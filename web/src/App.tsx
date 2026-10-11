@@ -183,6 +183,7 @@ function Shell() {
       <header className="app-header">
         <span className="app-title">Pit Wall</span>
         <span className="app-banner">{advisoryBasis(config)}</span>
+        <span className="app-replay-chip num">Replay of past races · dataset {config.datasetVersion}</span>
       </header>
       <main className="app-main">
         {route === "race" && <RacePage record={record} onLock={lockCall} onOpenEvidence={openEvidence} />}

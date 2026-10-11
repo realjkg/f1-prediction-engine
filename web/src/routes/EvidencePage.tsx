@@ -2,8 +2,10 @@ import { useEffect } from "react";
 import { AdvisoryBanner } from "../components/AdvisoryBanner";
 import { ConsensusChip } from "../components/ConsensusChip";
 import { ResourceView } from "../components/EngineError";
+import { ModelComparison } from "../components/ModelComparison";
 import { ProbabilityBars } from "../components/ProbabilityBars";
 import { isBacktestRecord, isPredictionRecord } from "../lib/calls";
+import { competitorColor } from "../lib/colors";
 import { useEngineClient, useResource } from "../lib/engine";
 import type { BacktestRecord, LedgerRecord, PredictionRecord } from "../types";
 
@@ -44,6 +46,9 @@ function PredictionLedgerCard({ record }: { record: PredictionRecord }) {
         </div>
       </dl>
 
+      <h3>Where the models disagree</h3>
+      <ModelComparison record={record} />
+
       <h3>Ensemble — winner</h3>
       <ProbabilityBars distribution={record.ensemble.winner} label={`${record.race.name} ensemble winner probabilities`} />
       <h3>Ensemble — podium</h3>
@@ -54,7 +59,11 @@ function PredictionLedgerCard({ record }: { record: PredictionRecord }) {
         {Object.entries(record.models).map(([modelId, model]) => (
           <div key={modelId} className="ledger-model">
             <h4>{modelId}</h4>
-            <ProbabilityBars distribution={model.winner} label={`${modelId} winner probabilities`} />
+            <ProbabilityBars
+              distribution={model.winner}
+              label={`${modelId} winner probabilities`}
+              color={competitorColor(modelId)}
+            />
           </div>
         ))}
       </details>

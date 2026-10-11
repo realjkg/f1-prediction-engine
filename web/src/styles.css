@@ -1,23 +1,3 @@
-:root {
-  --color-bg: #0b0f14;
-  --color-surface: #131a22;
-  --color-surface-raised: #1a232e;
-  --color-border: #24303d;
-  --color-text: #e8eef4;
-  --color-text-muted: #8fa3b5;
-  --color-accent: #2dd4bf;
-  --color-accent-dim: #14433c;
-  --color-warn: #f59e0b;
-  --color-danger: #ef4444;
-  --color-hue-teal: #2dd4bf;
-  --color-hue-papaya: #ff8c42;
-  --color-hue-crimson: #e10600;
-  --color-hue-silver: #cbd5e1;
-  --nav-height: 3.5rem;
-  --speed-fast: 180ms;
-  --speed-reveal: 450ms;
-}
-
 * {
   box-sizing: border-box;
 }
@@ -56,12 +36,21 @@ body {
   color: var(--color-text-muted);
 }
 
+.app-replay-chip {
+  align-self: flex-start;
+  font-size: 0.6875rem;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent-dim);
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+}
+
 .app-main {
   flex: 1;
   width: 100%;
   max-width: 40rem;
   margin: 0 auto;
-  padding: 1rem 1rem calc(var(--nav-height) + 1.5rem);
+  padding: 1rem 1rem calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + 1.5rem);
 }
 
 h1 {
@@ -129,6 +118,33 @@ h3 {
   color: var(--color-warn);
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- numerals ---- */
+
+/* Digits share one width so percentages, points, and Brier scores line up in
+   columns and do not jitter while bars animate. Digests stay monospace. */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.digest {
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
 /* ---- probability bars ---- */
 
 .prob-bars {
@@ -141,7 +157,7 @@ h3 {
 
 .prob-bar-row {
   display: grid;
-  grid-template-columns: minmax(7.5rem, 1fr) 2fr 3rem auto;
+  grid-template-columns: minmax(7.5rem, 1fr) 2fr 3rem;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.8125rem;
@@ -231,6 +247,124 @@ h3 {
 .model-card.is-highlight {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 1px var(--color-accent-dim);
+}
+
+/* A fixed per-competitor stripe. The card title always names the competitor. */
+.model-card.has-accent {
+  border-left: 4px solid var(--card-accent);
+}
+
+/* ---- model comparison (small multiples) ---- */
+
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  table-layout: fixed;
+}
+
+.comparison-table th,
+.comparison-table td {
+  text-align: left;
+  padding: 0.375rem 0.25rem;
+  vertical-align: top;
+}
+
+.comparison-table thead th {
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.comparison-table tbody th {
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.comparison-value {
+  display: block;
+  color: var(--color-text);
+}
+
+/* One shared 0-100% scale in every column, so lengths are comparable. */
+.comparison-track {
+  display: block;
+  height: 0.375rem;
+  margin-top: 0.125rem;
+  border-radius: 999px;
+  background: var(--color-surface-raised);
+  overflow: hidden;
+}
+
+.comparison-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+
+/* ---- replay dots ("if this race ran 20 times") ---- */
+
+.replay {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.replay-caption {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.replay-groups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.replay-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.replay-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  max-width: 9rem;
+}
+
+.replay-dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+.replay-group.is-shade-1 .replay-dot { background: var(--color-hue-papaya); }
+.replay-group.is-shade-2 .replay-dot { background: var(--color-hue-silver); }
+.replay-group.is-shade-3 .replay-dot { background: #56b4e9; }
+.replay-group.is-others .replay-dot {
+  background: transparent;
+  border: 1px solid var(--color-text-muted);
+}
+
+.replay-label {
+  font-size: 0.75rem;
+  color: var(--color-text);
+}
+
+.replay-group.is-actual .replay-label {
+  color: var(--color-accent);
+  font-weight: 700;
 }
 
 .model-card-head {
@@ -464,9 +598,11 @@ h3 {
 .grid-row {
   width: 100%;
   display: grid;
-  grid-template-columns: 1.75rem minmax(0, 1.6fr) minmax(0, 1fr) 3.5rem 1fr auto;
+  /* Call sheet rows render a driver and an optional slot badge. */
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.4rem;
+  min-height: 2.75rem; /* 44px touch target */
   text-align: left;
   font: inherit;
   font-size: 0.8125rem;
@@ -747,6 +883,20 @@ h3 {
   color: var(--color-text-muted);
 }
 
+.standings-table tfoot .baseline-row th,
+.standings-table tfoot .baseline-row td {
+  color: var(--color-text-muted);
+  font-style: italic;
+  border-bottom: none;
+}
+
+.baseline-note {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  margin: 0.5rem 0 0;
+}
+
 .standings-table tr.is-you th,
 .standings-table tr.is-you td {
   color: var(--color-accent);
@@ -1016,7 +1166,9 @@ h3 {
   bottom: 0;
   left: 0;
   right: 0;
-  height: var(--nav-height);
+  /* Keep the tabs clear of the iOS home indicator in the installed app. */
+  height: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   display: flex;
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
@@ -1024,6 +1176,9 @@ h3 {
 
 .nav-tab {
   flex: 1;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: 0 0.125rem;
   border: none;
   background: none;
   color: var(--color-text-muted);
@@ -1039,7 +1194,20 @@ h3 {
 
 /* ---- motion preferences ---- */
 
+/* Six tabs share a 375px screen; "Observability" needs a touch less width. */
+@media (max-width: 400px) {
+  .nav-tab {
+    font-size: 0.625rem;
+    letter-spacing: -0.01em;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  /* Skip the burst entirely rather than just shortening it. */
+  .confetti {
+    display: none;
+  }
+
   .prob-bar-fill,
   .confetti-shard,
   .reveal-headline,
@@ -1207,4 +1375,65 @@ h3 {
 }
 @media (max-width: 390px) {
   .supply-controls { grid-template-columns: 1fr; }
+/* ---- laptop and projector layout ---- */
+
+@media (min-width: 900px) {
+  :root {
+    --rail-width: 11rem;
+  }
+
+  /* The bottom tab bar becomes a left rail; the header and content sit beside it. */
+  .app-shell {
+    padding-left: var(--rail-width);
+  }
+
+  .bottom-nav {
+    top: 0;
+    right: auto;
+    width: var(--rail-width);
+    height: auto;
+    padding: 1rem 0.5rem;
+    flex-direction: column;
+    gap: 0.25rem;
+    border-top: none;
+    border-right: 1px solid var(--color-border);
+    /* main scrolls the bottom bar sideways for extra tabs; the rail scrolls down instead. */
+    overflow-x: visible;
+    overflow-y: auto;
+    max-height: 100dvh;
+  }
+
+  .nav-tab {
+    flex: none;
+    min-height: 2.75rem;
+    padding: 0 0.75rem;
+    text-align: left;
+    font-size: 0.875rem;
+    letter-spacing: normal;
+    border-radius: 8px;
+  }
+
+  .nav-tab.is-active {
+    background: var(--color-surface-raised);
+  }
+
+  .app-main {
+    max-width: 64rem;
+    padding-bottom: 2rem;
+  }
+
+  .reveal-cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .ledger {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    align-items: start;
+  }
+
+  .comparison-table {
+    font-size: 0.8125rem;
+  }
 }

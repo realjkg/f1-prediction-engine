@@ -1,6 +1,13 @@
 import { AdvisoryBanner } from "../components/AdvisoryBanner";
 import { ConsensusChip } from "../components/ConsensusChip";
 import { ResourceView } from "../components/EngineError";
+import {
+  TYPICAL_GRID_SIZE,
+  formatHitFraction,
+  formatPercent,
+  randomWinnerRate,
+  uniformBrier,
+} from "../lib/baseline";
 import { useEngineClient, useResource } from "../lib/engine";
 import { COMPETITOR_NAMES, playedRounds, seasonStandings } from "../lib/standings";
 import type { BacktestRecord, PitWallRecord } from "../types";
@@ -27,22 +34,32 @@ function BacktestPanel({ backtest }: { backtest: BacktestRecord }) {
             <th scope="col">Model</th>
             <th scope="col">Winner hit</th>
             <th scope="col">Podium@3</th>
-            <th scope="col">Mean Brier</th>
-            <th scope="col">Rounds</th>
+            <th scope="col">Mean Brier (lower is better)</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.id}>
               <th scope="row">{COMPETITOR_NAMES[row.id as keyof typeof COMPETITOR_NAMES] ?? row.id}</th>
-              <td>{Math.round(row.winnerHitRate * 100)}%</td>
-              <td>{Math.round(row.podium3HitRate * 100)}%</td>
-              <td>{row.meanBrier.toFixed(3)}</td>
-              <td>{row.rounds}</td>
+              <td className="num">{formatHitFraction(row.winnerHitRate, row.rounds)}</td>
+              <td className="num">{formatHitFraction(row.podium3HitRate, row.rounds)}</td>
+              <td className="num">{row.meanBrier.toFixed(3)}</td>
             </tr>
           ))}
         </tbody>
+        <tfoot>
+          <tr className="baseline-row">
+            <th scope="row">Blind guess</th>
+            <td className="num">≈{formatPercent(randomWinnerRate())}</td>
+            <td className="num">—</td>
+            <td className="num">{uniformBrier().toFixed(2)}</td>
+          </tr>
+        </tfoot>
       </table>
+      <p className="baseline-note">
+        Blind guess = picking a winner at random on a {TYPICAL_GRID_SIZE}-car grid, or giving every driver an equal
+        chance. Beating it is the bar; a perfect forecast scores 0 on Brier.
+      </p>
       <details className="metric-definitions">
         <summary>What these mean</summary>
         <dl>
