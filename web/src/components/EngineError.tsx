@@ -34,6 +34,7 @@ function errorHeadline(error: ApiError): string {
       return "No authorized in-race evidence source is configured.";
     case "LAP_TRACE_NOT_FOUND":
     case "SCENARIO_NOT_FOUND":
+    case "PRIOR_FUSION_NOT_FOUND":
       return "No verified lap and scenario artifact exist for this selection.";
     case "LAP_TRACE_INVALID":
     case "LAP_TRACE_TAMPERED":
