@@ -111,6 +111,26 @@ def _rows(
             if captured is not None and when > captured:
                 raise LapTraceError("source event cannot occur after capture")
             items.append((when, record))
+        # MQTT updates may publish multiple revisions of one provider
+        # document. Retain the latest revision *available by the cutoff*,
+        # not every delivery as a separate lap or pit event. Never collapse
+        # unrelated source documents or invent missing sequence numbers.
+        if any("_key" in item for _, item in items):
+            revisions: dict[str, tuple[datetime, dict[str, object]]] = {}
+            unkeyed: list[tuple[datetime, dict[str, object]]] = []
+            for when, item in items:
+                key = item.get("_key")
+                if not isinstance(key, str) or not key:
+                    unkeyed.append((when, item))
+                    continue
+                old = revisions.get(key)
+                if old is None or (
+                    when, int(item.get("_id", -1))
+                ) >= (
+                    old[0], int(old[1].get("_id", -1))
+                ):
+                    revisions[key] = (when, item)
+            items = unkeyed + list(revisions.values())
         items.sort(key=lambda item: item[0])
         result[topic] = items
     return result
@@ -156,6 +176,7 @@ def project_lap_checkpoint(
     lap_history: dict[int, list[tuple[datetime, int, float]]] = {
         car: [] for car in entrant_numbers
     }
+    completed_laps: dict[tuple[int, int], tuple[datetime, float]] = {}
     for ended, item in by_topic.get("laps", []):
         car, number, duration = (
             item.get("driver_number"),
@@ -164,7 +185,11 @@ def project_lap_checkpoint(
         )
         if car in entrant_numbers and type(number) is int and type(duration) in (int, float):
             if number <= lap and math.isfinite(duration):
-                lap_history[car].append((ended, number, float(duration)))
+                # Duplicate/revised lap documents must not count as extra
+                # pace samples; only one completed lap per driver/number.
+                completed_laps[(car, number)] = (ended, float(duration))
+    for (car, number), (ended, duration) in completed_laps.items():
+        lap_history[car].append((ended, number, duration))
     # 'Lap 25' convention: leader is in progress on lap 25, and 24 laps are
     # complete. Do not reconstruct a lap-25 view using evidence after lap 25.
     leader = next((car for car, pos in latest_position.items() if pos == 1), None)
@@ -191,9 +216,16 @@ def project_lap_checkpoint(
             latest_gaps[car] = (event_time, value)
 
     pit_counts = dict.fromkeys(entrant_numbers, 0)
+    seen_pits: set[tuple[object, object, object]] = set()
     for _, item in by_topic.get("pit", []):
         car = item.get("driver_number")
-        if car in pit_counts:
+        if car not in pit_counts:
+            continue
+        # One pit visit can be delivered repeatedly or updated by the
+        # provider. A repeated event is not another pit stop.
+        identity = (car, item.get("lap_number"), item.get("date"))
+        if identity not in seen_pits:
+            seen_pits.add(identity)
             pit_counts[car] += 1
 
     status = "UNKNOWN"
