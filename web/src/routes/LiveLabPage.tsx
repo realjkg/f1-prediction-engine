@@ -1,0 +1,150 @@
+import { useEffect, useState } from "react";
+import { EngineErrorPanel, Loading } from "../components/EngineError";
+import { useEngineClient, useResource } from "../lib/engine";
+import type { InRaceRunArtifact } from "../types";
+
+const formatNumber = (value: number) => value.toFixed(1);
+
+/**
+ * In-race Lab — reads a VERIFIED local artifact. Never synthesizes a new
+ * prediction from a user's lap input, and never labels research as live.
+ */
+export function LiveLabPage() {
+  const client = useEngineClient();
+  const [raceInput, setRaceInput] = useState("singapore");
+  const [seasonInput, setSeasonInput] = useState("2026");
+  const [lapInput, setLapInput] = useState("");
+  const [query, setQuery] = useState({ raceId: "singapore", season: 2026, lap: undefined as number | undefined });
+  const [tick, setTick] = useState(0);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = setInterval(() => setTick((previous) => previous + 1), 15000);
+    return () => clearInterval(id);
+  }, [autoRefresh]);
+
+  const result = useResource(
+    () => client.getLapScenario(query.raceId, query.season, query.lap),
+    [query.raceId, query.season, query.lap, tick],
+  );
+
+  const run = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const raceId = raceInput.trim().toLowerCase();
+    const season = Number(seasonInput);
+    const lap = lapInput.trim() ? Number(lapInput) : undefined;
+    if (!/^[a-z0-9_-]{1,100}$/.test(raceId) ||
+        !Number.isInteger(season) || season < 1950 || season > 2100 ||
+        (lap !== undefined && (!Number.isInteger(lap) || lap < 1 || lap > 100))) {
+      return;
+    }
+    setQuery({ raceId, season, lap });
+    setTick((previous) => previous + 1);
+  };
+
+  return (
+    <section className="live-lab" aria-label="In-race analysis">
+      <h1>In-race Lab</h1>
+      <p className="screen-intro">
+        Replays verified lap checkpoints and experimental finish scenarios. A stored
+        artifact is not proof that a live telemetry feed is connected.
+      </p>
+      <div className="advisory-banner is-warning">
+        Research mode. Scenario frequencies are not calibrated winner probabilities.
+        No automatic model promotion or live betting recommendations.
+      </div>
+      <form className="live-lab-form" onSubmit={run}>
+        <label htmlFor="live-race">Race slug
+          <input id="live-race" value={raceInput} required onChange={(e) => setRaceInput(e.target.value)} />
+        </label>
+        <label htmlFor="live-season">Season
+          <input id="live-season" type="number" min="1950" max="2100" value={seasonInput}
+            required onChange={(e) => setSeasonInput(e.target.value)} />
+        </label>
+        <label htmlFor="live-lap">Lap
+          <input id="live-lap" type="number" min="1" max="100" value={lapInput}
+            placeholder="Latest" onChange={(e) => setLapInput(e.target.value)} />
+        </label>
+        <button className="primary-button" type="submit">Load verified checkpoint</button>
+      </form>
+      <label className="live-auto">
+        <input type="checkbox" checked={autoRefresh}
+          onChange={(e) => setAutoRefresh(e.target.checked)} />
+        Refresh server artifacts every 15 seconds
+      </label>
+
+      {result.status === "loading" ? <Loading label="Verified in-race artifact" /> : null}
+      {result.status === "error" ? (
+        <div role="status">
+          <EngineErrorPanel context="Verified in-race artifact" error={result.error} onRetry={result.retry} />
+          <p className="screen-intro">
+            If this race has no licensed timing source or recorded checkpoint, there
+            is no simulation to show. The app never invents positions or gaps.
+          </p>
+        </div>
+      ) : null}
+      {result.status === "ready" ? <ScenarioDetails artifact={result.data} /> : null}
+    </section>
+  );
+}
+
+function ScenarioDetails({ artifact }: { artifact: InRaceRunArtifact }) {
+  const scenario = artifact.scenario;
+  return (
+    <div className="live-artifact" aria-label="Simulation artifact">
+      <div className="live-summary">
+        <span className="live-value">Lap {artifact.lap}{scenario ? ` / ${scenario.totalLaps}` : ""}</span>
+        <span className="live-pill">{artifact.sourceType}</span>
+      </div>
+      <p className="screen-intro">
+        Source recorded {new Date(artifact.generatedAt).toLocaleString()}.
+        Snapshot digest <code>{artifact.checkpointSha256.slice(0, 16)}…</code>.
+      </p>
+      {artifact.sourceType === "synthetic-fixture" && (
+        <p className="advisory-banner is-warning">
+          Synthetic test fixture. These positions and results are NOT from a real race.
+        </p>
+      )}
+      {!scenario ? (
+        <div className="empty-state" role="status">
+          Scenario refused: {artifact.refusalReason ?? "Insufficient verified lap-state data."}
+          The recorded lap trace is still available through the API.
+        </div>
+      ) : (
+        <>
+          <p className="screen-intro">
+            {scenario.remainingLaps} laps remaining at this checkpoint.
+            {scenario.trials.toLocaleString()} deterministic conditional trials.
+            Frozen as of {new Date(scenario.observedAt).toLocaleString()}.
+          </p>
+          <h2>Observed vs. conditional scenario</h2>
+          <table className="standings-table">
+            <thead><tr><th scope="col">Driver #</th><th scope="col">Now</th>
+              <th scope="col">Green-flag win frequency</th><th scope="col">Top 4</th></tr></thead>
+            <tbody>
+              {[...scenario.drivers]
+                .sort((a, b) => b.conditionalWinFrequency - a.conditionalWinFrequency)
+                .map((driver) => (
+                  <tr key={driver.driverNumber}>
+                    <th scope="row">#{driver.driverNumber}</th>
+                    <td>P{driver.currentPosition}</td>
+                    <td>{formatNumber(driver.conditionalWinFrequency * 100)}%</td>
+                    <td>{formatNumber(driver.conditionalTopFourFrequency * 100)}%</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+          <h2>Model assumptions</h2>
+          <ul className="live-assumptions">
+            {scenario.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}
+          </ul>
+        </>
+      )}
+      <p className="screen-intro">
+        Artifact SHA-256: <code>{artifact.artifactSha256.slice(0, 24)}…</code>.
+        This is read-only evidence, not a live production prediction.
+      </p>
+    </div>
+  );
+}
