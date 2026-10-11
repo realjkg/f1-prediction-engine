@@ -456,6 +456,7 @@ export interface InRaceRunArtifact {
   schemaVersion: 1;
   checkpointSha256: string;
   sourceSha256: string;
+  sourceType: "historical-archive" | "licensed-live" | "synthetic-fixture";
   season: number;
   raceId: string;
   lap: number;
