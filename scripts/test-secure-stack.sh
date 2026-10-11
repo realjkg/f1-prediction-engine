@@ -3,6 +3,10 @@
 set -euo pipefail
 
 TMP="$(mktemp -d)"
+# The engine is deliberately non-root (UID 10001). CI's temporary directory
+# defaults to 0700; make only its DIRECTORY traversable for this local smoke
+# test. Production keys use scoped group ACLs, not globally readable keys.
+chmod 755 "$TMP"
 export F1E_TLS_CERTS_DIR="$TMP"
 export F1E_TLS_BIND_ADDRESS=127.0.0.1
 export F1E_TLS_PORT="${F1E_TLS_PORT:-18443}"
