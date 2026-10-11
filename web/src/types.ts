@@ -482,6 +482,9 @@ export interface UpdatedScenario {
   status: "unqualified-blend";
   checkpointSha256: string;
   sourcePriorSha256: string;
+  sourceModelArtifactSha256: string;
+  sourceDatasetSha256: string;
+  priorFrozenAt: string;
   modelRevision: string;
   lap: number;
   totalLaps: number;
