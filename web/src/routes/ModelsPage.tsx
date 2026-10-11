@@ -57,7 +57,7 @@ function BacktestPanel({ backtest }: { backtest: BacktestRecord }) {
         </tfoot>
       </table>
       <p className="baseline-note">
-        Blind guess = picking a winner at random on a {TYPICAL_GRID_SIZE}-car grid, or giving every driver an equal
+        Blind guess = picking a winner at random on a typical {TYPICAL_GRID_SIZE}-car grid, or giving every driver an equal
         chance. Beating it is the bar; a perfect forecast scores 0 on Brier.
       </p>
       <details className="metric-definitions">

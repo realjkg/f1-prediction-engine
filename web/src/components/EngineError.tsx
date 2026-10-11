@@ -15,7 +15,7 @@ function errorHeadline(error: ApiError): string {
     case "ENGINE_UNREACHABLE":
       return typeof navigator !== "undefined" && navigator.onLine === false
         ? "You're offline. Your saved calls are safe on this device; retry once you're back online."
-        : "Can't reach the prediction engine. Your saved calls are safe on this device; retry in a moment. Running it yourself? Start it with `make demo`.";
+        : "Can't reach the prediction engine. Your saved calls are safe on this device; retry in a moment. Running it yourself? Start it with make demo.";
     case "RACE_UNKNOWN":
       return "The engine has no race under that identity.";
     case "RACE_AMBIGUOUS":

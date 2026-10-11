@@ -1,5 +1,5 @@
 import { driverCode } from "../lib/drivers";
-import { replayStrip, replaySummary } from "../lib/replay";
+import { replayStrip, replaySummary, winnerNote } from "../lib/replay";
 
 interface ReplayDotsProps {
   /** A win distribution — driverId -> probability. */
@@ -16,8 +16,11 @@ interface ReplayDotsProps {
 export function ReplayDots({ distribution, actualWinnerId }: ReplayDotsProps) {
   const strip = replayStrip(distribution);
   if (strip.groups.length === 0) return null;
+  // An upset winner can round to zero dots; say where they fell rather than omit them.
+  const note = winnerNote(strip, actualWinnerId);
+  const spoken = replaySummary(strip, driverCode) + (note && actualWinnerId ? ` The actual winner, ${driverCode(actualWinnerId)}, won in ${note.text}.` : "");
   return (
-    <figure className="replay" aria-label={replaySummary(strip, driverCode)}>
+    <figure className="replay" aria-label={spoken}>
       <figcaption className="replay-caption">If this race ran {strip.runs} times…</figcaption>
       <ul className="replay-groups" aria-hidden="true">
         {strip.groups.map((group, index) => (
@@ -47,6 +50,11 @@ export function ReplayDots({ distribution, actualWinnerId }: ReplayDotsProps) {
           </li>
         )}
       </ul>
+      {note && actualWinnerId && (
+        <p className="replay-winner-note is-actual" aria-hidden="true">
+          ★ Actual winner {driverCode(actualWinnerId)}: won in {note.text}
+        </p>
+      )}
     </figure>
   );
 }

@@ -27,7 +27,7 @@ export function ObservabilityPage() {
               Events ({page.events.length} of {page.total})
             </h2>
             {page.events.length === 0 ? (
-              <p className="empty-state">No events recorded yet — lock a race to generate engine signals.</p>
+              <p className="empty-state">No engine events in the log right now. Live request activity shows in the /metrics counters below.</p>
             ) : (
               <table className="standings-table">
                 <thead>

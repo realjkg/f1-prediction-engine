@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REPLAY_RUNS, replayStrip, replaySummary } from "./replay";
+import { REPLAY_RUNS, replayStrip, replaySummary, winnerNote } from "./replay";
 
 const total = (strip: ReturnType<typeof replayStrip>) =>
   strip.groups.reduce((sum, group) => sum + group.dots, 0) + strip.otherDots;
@@ -31,7 +31,7 @@ describe("replayStrip", () => {
   });
 
   it("handles an empty or zero distribution without throwing", () => {
-    expect(replayStrip({})).toEqual({ groups: [], otherDots: REPLAY_RUNS, runs: REPLAY_RUNS });
+    expect(replayStrip({})).toEqual({ groups: [], allocation: {}, otherDots: REPLAY_RUNS, runs: REPLAY_RUNS });
     expect(replayStrip({ a: 0 }).groups).toEqual([]);
   });
 
@@ -40,5 +40,35 @@ describe("replayStrip", () => {
     expect(replaySummary(strip, (id) => id.toUpperCase())).toBe(
       "If this race ran 20 times: HAM wins about 10, VER about 6, all others 4.",
     );
+  });
+});
+
+describe("winnerNote", () => {
+  // Real shape of the Austrian GP: the winner (russell) was a ~2% long shot.
+  const field = { ver: 0.5, nor: 0.25, lec: 0.12, ham: 0.08, pia: 0.03, rus: 0.02 };
+
+  it("says nothing when the winner already has a named group", () => {
+    expect(winnerNote(replayStrip(field), "ver")).toBeNull();
+  });
+
+  it("says nothing when the winner is unknown", () => {
+    expect(winnerNote(replayStrip(field), undefined)).toBeNull();
+  });
+
+  it("reports a long shot who rounds to zero dots instead of dropping them", () => {
+    const note = winnerNote(replayStrip(field), "rus");
+    expect(note).toEqual({ count: 0, text: "fewer than 1 of 20 replays" });
+  });
+
+  it("reports a winner folded into others with their own count", () => {
+    const strip = replayStrip({ a: 0.4, b: 0.3, c: 0.15, d: 0.1, e: 0.05 }, 20, 2);
+    expect(strip.groups.map((group) => group.driverId)).toEqual(["a", "b"]);
+    expect(winnerNote(strip, "d")).toEqual({ count: 2, text: "about 2 of 20 replays" });
+  });
+
+  it("allocates every driver, including long shots", () => {
+    const strip = replayStrip(field);
+    expect(Object.values(strip.allocation).reduce((a, b) => a + b, 0)).toBe(REPLAY_RUNS);
+    expect(strip.allocation.rus).toBe(0);
   });
 });

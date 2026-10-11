@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ConsensusChip } from "./ConsensusChip";
 import { ProbabilityBars } from "./ProbabilityBars";
 import { timerAnnouncement } from "./CallSheetView";
+import { revealHeadline } from "./RevealView";
 
 afterEach(cleanup);
 
@@ -45,5 +46,27 @@ describe("timerAnnouncement", () => {
     expect(timerAnnouncement(10)).toMatch(/10 seconds left/);
     expect(timerAnnouncement(5)).toBe("");
     expect(timerAnnouncement(0)).toMatch(/Time is up/);
+  });
+});
+
+describe("revealHeadline", () => {
+  const miss = (slot: "p1" | "p2" | "p3") => ({ slot, driverId: "x", actualPosition: 9, outcome: "MISS" as const, points: 0 });
+  const zeroRound = {
+    picks: [miss("p1"), miss("p2"), miss("p3")],
+    basePoints: 0,
+    consensusFlag: null,
+    coinFlip: false,
+    totalPoints: 0,
+  };
+
+  it("only claims the machine saw it coming when its podium held a real finisher", () => {
+    expect(revealHeadline(zeroRound, true)).toBe("THE MACHINE SAW IT COMING");
+    expect(revealHeadline(zeroRound, false)).toBe("NOBODY SAW THAT COMING");
+  });
+
+  it("keeps the scoring headlines unchanged", () => {
+    expect(revealHeadline({ ...zeroRound, totalPoints: 2 }, false)).toBe("ON THE BOARD");
+    const winner = { ...zeroRound, totalPoints: 8, picks: [{ ...miss("p1"), outcome: "EXACT" as const }, miss("p2"), miss("p3")] };
+    expect(revealHeadline(winner, false)).toBe("WINNER CALLED");
   });
 });

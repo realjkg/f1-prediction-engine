@@ -30,13 +30,18 @@ interface RevealViewProps {
   onOpenEvidence: () => void;
 }
 
-function revealHeadline(round: CallScore["round"]): string {
+/**
+ * The headline for a scored round. A zero-point round only claims "the machine
+ * saw it coming" when the ensemble's podium call really held a driver who
+ * finished on the podium; otherwise the honest line is that nobody saw it.
+ */
+export function revealHeadline(round: CallScore["round"], machineHadPodiumDriver: boolean): string {
   if (round.picks.every((pick) => pick.outcome === "EXACT")) return "EXACT PODIUM";
   if (round.picks.some((pick) => pick.slot === "p1" && pick.outcome === "EXACT")) {
     return "WINNER CALLED";
   }
   if (round.totalPoints > 0) return "ON THE BOARD";
-  return "THE MACHINE SAW IT COMING";
+  return machineHadPodiumDriver ? "THE MACHINE SAW IT COMING" : "NOBODY SAW THAT COMING";
 }
 
 function ActualPodium({ result }: { result: RaceResultView }) {
@@ -76,13 +81,16 @@ export function RevealView({
     ensembleCall != null &&
     [ensembleCall.p1, ensembleCall.p2, ensembleCall.p3].includes(nearMissPick.driverId);
   const exact = score.round.picks.every((pick) => pick.outcome === "EXACT");
+  const machineHadPodiumDriver =
+    ensembleCall != null &&
+    [ensembleCall.p1, ensembleCall.p2, ensembleCall.p3].some((driverId) => result.podium.includes(driverId));
 
   return (
     <section className="reveal" aria-label={`Reveal for ${race.name}`}>
       <Confetti show={exact} />
       <header className="reveal-head">
         <p className="reveal-kicker">{race.name}</p>
-        <h1 className={`reveal-headline${exact ? " is-exact" : ""}`}>{revealHeadline(score.round)}</h1>
+        <h1 className={`reveal-headline${exact ? " is-exact" : ""}`}>{revealHeadline(score.round, machineHadPodiumDriver)}</h1>
         {score.round.consensusFlag && <ConsensusChip flag={score.round.consensusFlag} coinFlip />}
         <p className="reveal-hindsight">Open replay — the models never saw this result; you may remember it.</p>
       </header>

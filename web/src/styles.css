@@ -157,16 +157,15 @@ h3 {
 
 .prob-bar-row {
   display: grid;
-  grid-template-columns: minmax(7.5rem, 1fr) 2fr 3rem;
+  grid-template-columns: minmax(9rem, 1.3fr) 1.5fr 2.75rem;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.8125rem;
 }
 
 .prob-bar-driver {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Let a long name wrap rather than cut it to "Max Versta…". */
+  overflow-wrap: anywhere;
 }
 
 .prob-bar-track {
@@ -307,7 +306,7 @@ h3 {
 /* ---- replay dots ("if this race ran 20 times") ---- */
 
 .replay {
-  margin: 0 0 1rem;
+  margin: 0.75rem 0 1rem;
   padding: 0.75rem 0.875rem;
   border: 1px solid var(--color-border);
   border-radius: 10px;
@@ -360,6 +359,13 @@ h3 {
 .replay-label {
   font-size: 0.75rem;
   color: var(--color-text);
+}
+
+.replay-winner-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-accent);
+  font-weight: 700;
 }
 
 .replay-group.is-actual .replay-label {
@@ -1011,13 +1017,15 @@ h3 {
 /* ---- brief ---- */
 
 .brief-switcher {
-  display: flex;
+  /* One wrapping grid: a long season list must never widen the page. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.75rem, 1fr));
   gap: 0.375rem;
   margin-bottom: 0.75rem;
 }
 
 .brief-tab {
-  flex: 1;
+  min-height: 2.75rem;
   font: inherit;
   font-size: 0.8125rem;
   font-weight: 600;
@@ -1436,4 +1444,184 @@ h3 {
   .comparison-table {
     font-size: 0.8125rem;
   }
+}
+
+/* ---- loading and error states ---- */
+
+.engine-loading {
+  padding: 1rem 0;
+  color: var(--color-text-muted);
+}
+
+.engine-loading-label {
+  margin: 0;
+}
+
+.engine-error {
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 45%, transparent);
+  border-left: 4px solid var(--color-danger);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.engine-error h2 {
+  margin: 0 0 0.375rem;
+  font-size: 0.9375rem;
+}
+
+.engine-error-headline {
+  margin: 0 0 0.5rem;
+  line-height: 1.5;
+}
+
+.engine-error-detail {
+  margin: 0 0 0.75rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.engine-error.is-inline {
+  margin: 0.5rem 0;
+}
+
+/* ---- settings ---- */
+
+.settings-contract .ledger-meta > div:last-child {
+  grid-column: 1 / -1;
+}
+
+.settings-profile {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.settings-field {
+  display: grid;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.settings-field input[type="text"] {
+  font: inherit;
+  font-size: 1rem;
+  min-height: 2.75rem;
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+
+.toggle {
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+  min-height: 2.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.toggle input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+  flex: none;
+  accent-color: var(--color-accent);
+}
+
+.settings-note {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.danger-button {
+  justify-self: start;
+  min-height: 2.75rem;
+}
+
+/* ---- observability ---- */
+
+.event-log {
+  overflow-x: auto;
+}
+
+.event-detail {
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+/* The raw metrics text scrolls inside its own box; it must never widen the page. */
+.metrics-raw {
+  margin: 0;
+  max-width: 100%;
+  max-height: 24rem;
+  overflow: auto;
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+/* ---- small pieces ---- */
+
+.back-to-picker {
+  margin-top: 1rem;
+}
+
+.ledger-status {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.data-limits-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-warn);
+}
+
+.metric-definitions {
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.metric-definitions summary {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  cursor: pointer;
+}
+
+.metric-definitions dt {
+  margin-top: 0.5rem;
+  font-weight: 600;
+}
+
+.metric-definitions dd {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.model-card-empty {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.brief-digest h4 {
+  margin: 0.75rem 0 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
 }

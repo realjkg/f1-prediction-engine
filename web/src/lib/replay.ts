@@ -17,6 +17,11 @@ export interface ReplayGroup {
 export interface ReplayStrip {
   /** Named drivers, most likely first, each with at least one dot. */
   groups: ReplayGroup[];
+  /**
+   * Every driver's dot count, named or not (0 for a long shot). Lets the UI say
+   * where a driver fell even when they are folded into "others".
+   */
+  allocation: Record<string, number>;
   /** Dots left over for everyone not named. */
   otherDots: number;
   runs: number;
@@ -36,7 +41,7 @@ export function replayStrip(
     .filter(([, probability]) => Number.isFinite(probability) && probability > 0)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   const total = entries.reduce((sum, [, probability]) => sum + probability, 0);
-  if (total <= 0) return { groups: [], otherDots: runs, runs };
+  if (total <= 0) return { groups: [], allocation: {}, otherDots: runs, runs };
 
   // Normalize in case the distribution does not sum to exactly 1.
   const shares = entries.map(([driverId, probability]) => {
@@ -51,10 +56,14 @@ export function replayStrip(
     assigned += 1;
   }
 
+  const allocation: Record<string, number> = Object.fromEntries(
+    shares.map((share) => [share.driverId, share.floor]),
+  );
   const named = shares.filter((share) => share.floor > 0).slice(0, maxNamed);
   const namedDots = named.reduce((sum, share) => sum + share.floor, 0);
   return {
     groups: named.map((share) => ({ driverId: share.driverId, dots: share.floor })),
+    allocation,
     otherDots: runs - namedDots,
     runs,
   };
@@ -67,4 +76,18 @@ export function replaySummary(strip: ReplayStrip, label: (driverId: string) => s
   );
   if (strip.otherDots > 0) parts.push(`all others ${strip.otherDots}`);
   return `If this race ran ${strip.runs} times: ${parts.join(", ")}.`;
+}
+
+/**
+ * Where the actual winner fell in the strip: "about 3 of 20 replays", or
+ * "fewer than 1 of 20" for a long shot who rounds to zero dots. Null when the
+ * winner is unknown or already shown as a named group.
+ */
+export function winnerNote(strip: ReplayStrip, winnerId: string | undefined): { count: number; text: string } | null {
+  if (!winnerId || strip.groups.some((group) => group.driverId === winnerId)) return null;
+  const count = strip.allocation[winnerId] ?? 0;
+  return {
+    count,
+    text: count > 0 ? `about ${count} of ${strip.runs} replays` : `fewer than 1 of ${strip.runs} replays`,
+  };
 }
