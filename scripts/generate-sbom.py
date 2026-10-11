@@ -21,7 +21,7 @@ LOCKS = (
     "engine/requirements-dev.lock.txt",
     "web/package-lock.json",
 )
-REQ_PATTERN = re.compile(r"^([A-Za-z0-9_.-]+)==([A-Za-z0-9_.!+\-]+)(?:\\\\|\\s|$)", re.M)
+REQ_PATTERN = re.compile(r"^([A-Za-z0-9_.-]+)==([A-Za-z0-9_.!+-]+)", re.M)
 PY_CANON = re.compile(r"[-_.]+")
 LIMITATIONS = [
     "Lockfile inventory only, not a scan of deployed container or native mobile binaries",
