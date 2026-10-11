@@ -55,6 +55,19 @@ assert payload["advisoryOnly"] is True
 assert payload["datasetVersion"]
 PY
 
+# The same runtime SBOM must be available through the TLS 1.3 ingress.
+curl -fsS --cacert "$TMP/ca.crt" --tlsv1.3 --tls-max 1.3 \
+  "https://localhost:$F1E_TLS_PORT/api/supply-chain" > /tmp/f1-tls-sbom.json
+python3 - <<'PY'
+import json
+with open("/tmp/f1-tls-sbom.json", encoding="utf-8") as stream:
+    inventory = json.load(stream)
+assert inventory["status"] == "lockfile-inventory-only"
+assert inventory["totalComponents"] == len(inventory["components"])
+assert len(inventory["sbomSha256"]) == 64
+assert inventory["releaseReady"] is False
+PY
+
 if curl -fsS --cacert "$TMP/ca.crt" --tlsv1.2 --tls-max 1.2 \
   "https://localhost:$F1E_TLS_PORT/api/config" >/dev/null 2>&1; then
   echo "SECURITY FAILURE: TLS 1.2 unexpectedly negotiated" >&2
