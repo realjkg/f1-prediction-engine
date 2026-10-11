@@ -13,6 +13,7 @@ import json
 import math
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 from f1engine.inrace_evaluation import FrozenEvaluationCase, _proper_score
 
@@ -246,3 +247,68 @@ def evaluate_forward_weights(
         folds=tuple(folds), paired_summary=payload["pairedSummary"],
         caveats=payload["caveats"], report_sha256=digest,
     )
+
+
+def report_to_wire(report: ForwardReport) -> dict[str, object]:
+    """Exact artifact shape; digest covers all stored fields except itself."""
+    return {
+        "revision": report.revision,
+        "researchOnly": report.research_only,
+        "modelPromotionAllowed": report.model_promotion_allowed,
+        "minimumTrainingRaces": report.minimum_training_races,
+        "candidateWeights": list(report.candidate_weights),
+        "eligibleRaces": report.eligible_races,
+        "scoredRaces": report.scored_races,
+        "unscoredRaces": report.unscored_races,
+        "folds": [asdict(fold) for fold in report.folds],
+        "pairedSummary": report.paired_summary,
+        "caveats": list(report.caveats),
+        "reportSha256": report.report_sha256,
+    }
+
+
+def read_forward_report(path: Path) -> dict[str, object]:
+    """Refuse modified reports and any document claiming promotion."""
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ValueError("unable to read research report") from error
+    required = {
+        "revision", "researchOnly", "modelPromotionAllowed",
+        "minimumTrainingRaces", "candidateWeights", "eligibleRaces",
+        "scoredRaces", "unscoredRaces", "folds", "pairedSummary", "caveats",
+        "reportSha256",
+    }
+    if not isinstance(document, dict) or set(document) != required:
+        raise ValueError("research report schema invalid")
+    if (
+        document["revision"] != EVALUATION_REVISION
+        or document["researchOnly"] is not True
+        or document["modelPromotionAllowed"] is not False
+        or document["candidateWeights"] != list(WEIGHT_GRID)
+        or not isinstance(document["reportSha256"], str)
+    ):
+        raise ValueError("research report status or revision invalid")
+    given = document["reportSha256"]
+    expected = hashlib.sha256(
+        json.dumps(
+            {key: val for key, val in document.items() if key != "reportSha256"},
+            sort_keys=True, separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    if given != expected:
+        raise ValueError("research report digest mismatch")
+    return document
+
+
+def write_forward_report(path: Path, report: ForwardReport) -> Path:
+    """Immutable output file; never rewrite scored results in place."""
+    document = report_to_wire(report)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with path.open("x", encoding="utf-8") as stream:
+            stream.write(json.dumps(document, sort_keys=True, indent=2, allow_nan=False) + "\\n")
+    except FileExistsError:
+        if read_forward_report(path) != document:
+            raise ValueError("existing research report differs; refusing overwrite") from None
+    return path
