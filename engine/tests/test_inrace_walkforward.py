@@ -8,6 +8,9 @@ from pathlib import Path
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from fastapi.testclient import TestClient
+
+from f1engine.app import ApiSettings, create_app
 
 from f1engine.inrace_evaluation import FrozenEvaluationCase
 from f1engine.inrace_walkforward import (
@@ -163,3 +166,32 @@ def test_report_is_immutable_and_detects_modification(tmp_path: Path) -> None:
         read_forward_report(path)
     with pytest.raises(ValueError, match="digest"):
         write_forward_report(path, report)
+
+
+def test_accuracy_api_refuses_absence_and_modified_evidence(
+    predictable_dataset, tmp_path: Path,
+) -> None:
+    missing = TestClient(create_app(ApiSettings(), dataset=predictable_dataset))
+    response = missing.get("/api/inrace/accuracy")
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "ACCURACY_REPORT_UNAVAILABLE"
+
+    report = evaluate_forward_weights([frozen_case(i) for i in range(7)])
+    path = write_forward_report(tmp_path / "forward.json", report)
+    client = TestClient(
+        create_app(
+            ApiSettings(inrace_accuracy_report=path), dataset=predictable_dataset,
+        )
+    )
+    good = client.get("/api/inrace/accuracy")
+    assert good.status_code == 200
+    assert good.headers["cache-control"] == "no-store"
+    assert good.json()["reportSha256"] == report.report_sha256
+    assert good.json()["modelPromotionAllowed"] is False
+
+    damaged = json.loads(path.read_text())
+    damaged["modelPromotionAllowed"] = True
+    path.write_text(json.dumps(damaged))
+    bad = client.get("/api/inrace/accuracy")
+    assert bad.status_code == 503
+    assert bad.json()["detail"]["code"] == "ACCURACY_REPORT_TAMPERED"
