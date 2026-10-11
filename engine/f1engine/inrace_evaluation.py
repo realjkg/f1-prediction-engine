@@ -8,9 +8,9 @@ one Grand Prix in the same evaluation fold to avoid event contamination.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Mapping
 
 from f1engine.live_prior import UpdatedScenario
 from f1engine.race_simulator import InRaceScenario
