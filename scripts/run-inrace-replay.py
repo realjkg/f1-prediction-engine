@@ -17,8 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "engine"))
 
-from f1engine.inrace_pipeline import project_and_record  # noqa: E402
-from f1engine.live_prior import PreRacePrior, combine_prerace_and_lap  # noqa: E402
+from f1engine.inrace_pipeline import project_and_record, write_fusion_artifacts  # noqa: E402
+from f1engine.live_prior import PreRacePrior  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,13 +67,10 @@ def main(argv: list[str] | None = None) -> int:
             report["priorFusion"] = "refused: conditional scenario unavailable"
         else:
             prior = PreRacePrior.model_validate_json(args.prior.read_text(encoding="utf-8"))
-            fusion = combine_prerace_and_lap(
-                prior, record, artifact.scenario,
-                green_scenario_weight=args.scenario_weight,
+            fusion = write_fusion_artifacts(
+                args.artifacts, record, artifact, prior,
+                scenario_weight=args.scenario_weight,
             )
-            output = args.artifacts / f"{args.season}-{args.race_id}" / (
-                f"lap-{args.lap:03d}") / (record.record_sha256 + ".fusion.json")
-            output.write_text(fusion.model_dump_json(by_alias=True) + "\n", encoding="utf-8")
             report["priorFusion"] = "unqualified-research"
             report["fusionHash"] = fusion.output_sha256
             report["priorModelRevision"] = fusion.model_revision
