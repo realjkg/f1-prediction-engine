@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -301,7 +302,6 @@ def test_mqtt_revised_document_uses_latest_available_revision_only() -> None:
     def wrapped(row: dict, sequence: int, received: datetime) -> dict:
         original = dict(row, _id=sequence)
         text = json.dumps(original)
-        import hashlib
         return {
             "topic": "v1/pit", "capturedAt": received.isoformat(),
             "rawPayloadText": text,
