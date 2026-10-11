@@ -29,6 +29,26 @@ jobs:
           grep -q "<div id=\"root\">" /tmp/home.html
           curl --fail --silent --show-error http://127.0.0.1:8080/api/config > /tmp/config.json
           python3 -c "import json; config=json.load(open('/tmp/config.json')); assert 'datasetVersion' in config, config"
+          # Prove the actual runtime serves its build-generated CycloneDX
+          # inventory, not only that CI can generate an unrelated file.
+          curl --fail --silent --show-error http://127.0.0.1:8080/api/supply-chain > /tmp/supply-chain.json
+          python3 - <<'PY'
+          import json
+          with open("/tmp/supply-chain.json", encoding="utf-8") as stream:
+              inventory = json.load(stream)
+          assert inventory["status"] == "lockfile-inventory-only", inventory
+          assert inventory["releaseReady"] is False
+          assert len(inventory["sbomSha256"]) == 64
+          assert inventory["totalComponents"] == len(inventory["components"])
+          assert inventory["ecosystemCounts"]["pypi"] > 20
+          assert inventory["ecosystemCounts"]["npm"] > 100
+          assert set(inventory["sourceDigests"]) == {
+              "engine/requirements.lock.txt",
+              "engine/requirements-dev.lock.txt",
+              "web/package-lock.json",
+          }
+          print("Verified runtime SBOM inventory:", inventory["totalComponents"])
+          PY
           if curl -fsS http://127.0.0.1:8080/metrics; then
             echo "Metrics were unexpectedly public"; exit 1
           fi
