@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import ssl
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -58,3 +59,26 @@ def test_normalizer_refuses_bad_session_source_shape_and_future_events() -> None
 def test_optional_mqtt_code_does_not_require_install_to_import() -> None:
     assert module().BROKER == "mqtt.openf1.org"
     assert module().PORT == 8883
+
+
+def test_mqtt_tls_context_requires_tls13_and_verifies_broker() -> None:
+    collector = module()
+    if not ssl.HAS_TLSv1_3:
+        with pytest.raises(RuntimeError, match="TLS 1.3 is required"):
+            collector.build_tls_context()
+        return
+    context = collector.build_tls_context()
+    assert isinstance(context, ssl.SSLContext)
+    assert context.minimum_version == ssl.TLSVersion.TLSv1_3
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+    assert context.maximum_version in (
+        ssl.TLSVersion.MAXIMUM_SUPPORTED, ssl.TLSVersion.TLSv1_3,
+    )
+
+
+def test_tls13_unavailable_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    collector = module()
+    monkeypatch.setattr(collector.ssl, "HAS_TLSv1_3", False)
+    with pytest.raises(RuntimeError, match="TLS 1.3 is required"):
+        collector.build_tls_context()
