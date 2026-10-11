@@ -15,8 +15,13 @@ from pydantic import ValidationError
 
 from f1engine.app import ApiSettings, create_app
 from f1engine.lap_trace import (
-    DriverOnTrack, LapCheckpoint, LapTraceError, LapTraceTampered,
-    append_lap_checkpoint, get_lap_observation, verify_lap_trace,
+    DriverOnTrack,
+    LapCheckpoint,
+    LapTraceError,
+    LapTraceTampered,
+    append_lap_checkpoint,
+    get_lap_observation,
+    verify_lap_trace,
 )
 
 AT = datetime(2026, 10, 11, 12, 30, tzinfo=UTC)
