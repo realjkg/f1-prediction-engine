@@ -420,3 +420,79 @@ export interface PitWallRecord {
   /** Evidence Room opens — the Data Nerd badge counter. */
   evidenceViews: number;
 }
+
+
+/** Snapshot-bound experimental in-race scenario. NOT calibrated win probabilities. */
+export interface DriverScenario {
+  driverNumber: number;
+  currentPosition: number;
+  currentGapSeconds: number;
+  conditionalWinFrequency: number;
+  conditionalTopFourFrequency: number;
+  estimatedGreenLapSeconds: number;
+}
+
+export interface InRaceScenario {
+  schemaVersion: 1;
+  scenarioRevision: "green-pace-no-stops-v1";
+  status: "experimental-scenario-only";
+  season: number;
+  raceId: string;
+  sessionKey: number;
+  checkpointLap: number;
+  totalLaps: number;
+  remainingLaps: number;
+  checkpointRecordSha256: string;
+  observedAt: string;
+  seed: number;
+  trials: number;
+  assumptions: string[];
+  drivers: DriverScenario[];
+  scenarioSha256: string;
+  advisoryOnly: true;
+}
+
+export interface InRaceRunArtifact {
+  schemaVersion: 1;
+  checkpointSha256: string;
+  sourceSha256: string;
+  sourceType: "historical-archive" | "licensed-live" | "synthetic-fixture";
+  season: number;
+  raceId: string;
+  lap: number;
+  generatedAt: string;
+  status: "scenario" | "insufficient-evidence";
+  scenario: InRaceScenario | null;
+  refusalReason: string | null;
+  modelReady: false;
+  advisoryOnly: true;
+  artifactSha256: string;
+}
+
+/** Frozen pre-race model + live checkpoint research blend. Not promoted. */
+export interface UpdatedScenarioDriver {
+  driverNumber: number;
+  preRaceProbability: number;
+  greenContinuationFrequency: number;
+  blendedResearchWeight: number;
+  currentPosition: number;
+}
+export interface UpdatedScenario {
+  scenarioRevision: "asof-prior-green-scenario-v1";
+  status: "unqualified-blend";
+  checkpointSha256: string;
+  sourcePriorSha256: string;
+  sourceModelArtifactSha256: string;
+  sourceDatasetSha256: string;
+  priorFrozenAt: string;
+  modelRevision: string;
+  lap: number;
+  totalLaps: number;
+  priorWeight: number;
+  greenScenarioWeight: number;
+  candidates: UpdatedScenarioDriver[];
+  explanation: string;
+  outputSha256: string;
+  promoted: false;
+  advisoryOnly: true;
+}

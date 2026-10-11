@@ -65,7 +65,14 @@ from f1engine.evidence import (
     verify_chain,
 )
 from f1engine.ingestion import PinnedDataset, load_snapshot
+from f1engine.inrace_pipeline import (
+    ArtifactTampered,
+    InRaceRunArtifact,
+    read_fusion_artifacts,
+    read_run_artifact,
+)
 from f1engine.lap_trace import LapTraceError, LapTraceRecord, get_lap_observation
+from f1engine.live_prior import UpdatedScenario
 from f1engine.observability import EventStatus, Signal
 from f1engine.scoring import CallScore, PitCall, score_call_sheet
 from f1engine.wire import WireModel
@@ -100,6 +107,7 @@ class ApiSettings:
     data_dir: Path = Path("data/snapshot")
     ledger_path: Path = Path(DEFAULT_LEDGER_PATH)
     lap_trace_path: Path | None = None
+    inrace_artifact_dir: Path | None = None
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
     brief_mode: Literal["fixture", "live"] = "fixture"
 
@@ -118,6 +126,8 @@ class ApiSettings:
             ledger_path=Path(environ.get("F1E_LEDGER_PATH", DEFAULT_LEDGER_PATH)),
             lap_trace_path=Path(environ["F1E_LAP_TRACE_PATH"])
             if environ.get("F1E_LAP_TRACE_PATH") else None,
+            inrace_artifact_dir=Path(environ["F1E_INRACE_ARTIFACT_DIR"])
+            if environ.get("F1E_INRACE_ARTIFACT_DIR") else None,
             cors_origins=origins,
             brief_mode=_brief_mode(environ.get("F1E_BRIEF_MODE")),
         )
@@ -676,6 +686,84 @@ def create_app(
                 "No verified lap evidence for the requested race and lap",
             )
         return record
+
+    @app.get("/api/races/{race_id}/lap-scenario")
+    def race_lap_scenario(
+        race_id: str,
+        response: Response,
+        season: Annotated[int, Query(ge=1950, le=2100)],
+        lap: Annotated[int | None, Query(ge=1)] = None,
+    ) -> InRaceRunArtifact:
+        """Serve only an already persisted, checkpoint-matched scenario artifact.
+
+        No training, projection or simulated outcome occurs on a GET request.
+        """
+        response.headers["Cache-Control"] = "no-store"
+        if resolved.lap_trace_path is None or resolved.inrace_artifact_dir is None:
+            raise _error(
+                503, "LIVE_SCENARIO_UNAVAILABLE",
+                "Live scenario data source and verified artifact directory not configured",
+            )
+        try:
+            record = get_lap_observation(
+                resolved.lap_trace_path, season=season, race_id=race_id, lap=lap
+            )
+            if record is None:
+                raise _error(404, "LAP_TRACE_NOT_FOUND", "No recorded lap evidence")
+            artifact = read_run_artifact(
+                resolved.inrace_artifact_dir,
+                season=season, race_id=race_id, lap=record.checkpoint.lap,
+                checkpoint_sha256=record.record_sha256,
+            )
+        except ArtifactTampered as error:
+            raise _error(503, error.code, str(error)) from error
+        except LapTraceError as error:
+            raise _error(503, error.code, str(error)) from error
+        if artifact is None:
+            raise _error(
+                404, "SCENARIO_NOT_FOUND",
+                "No immutable scenario artifact for the verified lap",
+            )
+        return artifact
+
+    @app.get("/api/races/{race_id}/lap-fusion")
+    def race_lap_fusion(
+        race_id: str,
+        response: Response,
+        season: Annotated[int, Query(ge=1950, le=2100)],
+        lap: Annotated[int | None, Query(ge=1)] = None,
+    ) -> UpdatedScenario:
+        """Reverify persisted pre-race + lap artifacts; never train during GET."""
+        response.headers["Cache-Control"] = "no-store"
+        if resolved.lap_trace_path is None or resolved.inrace_artifact_dir is None:
+            raise _error(
+                503, "LIVE_SCENARIO_UNAVAILABLE",
+                "No pre-race model and lap evidence are configured",
+            )
+        try:
+            record = get_lap_observation(
+                resolved.lap_trace_path, season=season, race_id=race_id, lap=lap
+            )
+            if record is None:
+                raise _error(404, "LAP_TRACE_NOT_FOUND", "No recorded lap evidence")
+            artifact = read_run_artifact(
+                resolved.inrace_artifact_dir,
+                season=season, race_id=race_id, lap=record.checkpoint.lap,
+                checkpoint_sha256=record.record_sha256,
+            )
+            if artifact is None:
+                raise _error(404, "SCENARIO_NOT_FOUND", "No verified lap scenario")
+            updated = read_fusion_artifacts(resolved.inrace_artifact_dir, record, artifact)
+        except ArtifactTampered as error:
+            raise _error(503, error.code, str(error)) from error
+        except LapTraceError as error:
+            raise _error(503, error.code, str(error)) from error
+        if updated is None:
+            raise _error(
+                404, "PRIOR_FUSION_NOT_FOUND",
+                "No verified frozen pre-race prior for this lap",
+            )
+        return updated
 
     @app.get("/api/races/{race_id}/result")
     def race_result(

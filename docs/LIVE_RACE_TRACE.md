@@ -1,9 +1,12 @@
 # In-race source capture and lap replay — Phase 1
 
-**Status:** evidence and replay foundation implemented. No qualified in-race
-probability model, no automatic current-event snapshots, no active live
-subscription, and no live streaming UI. Do not call this a working lap-25
-Singapore finish simulation.
+**Status:** verified source-to-lap projection, reproducible conditional scenario,
+immutable artifact loop, optional existing-engine pre-race model prior fusion,
+paired accuracy scorer, read-only APIs, and Live Lab React screen are implemented
+as a **research prototype**. No qualified in-race probability model, complete
+automated provider spool-to-bundle service, live subscription, or verified
+Singapore 2026 lap-25 checkpoint has been delivered. Never describe the
+research output as a calibrated race-winner probability or live prediction.
 
 ## Transport choice
 
@@ -39,14 +42,17 @@ redistributing a dataset or using this in a commercial product.
 OpenF1 MQTT/TLS feed (authorized backend session)
     -> topic-permitted, session-filtered raw event spool
        timestamp + provider _id/_key + SHA-256(raw bytes)
-    -> eventual as-of lap projector [NOT YET IMPLEMENTED]
+    -> cutoff-gated as-of lap projector (openf1_projection.py)
        positions + intervals + laps + stops + stints + control + weather
     -> LapCheckpoint schema (fail on missing leader, bad time or duplicates)
     -> append-only chained lap trace (SHA-256 integrity)
     -> GET /api/races/{raceId}/lap-trace?season=2026&lap=25
        observed running order only; forecastStatus = not-qualified
-    -> eventual trained in-race model [NOT YET IMPLEMENTED]
-       prior + remaining-lap pace/risk + pit strategy + calibrated uncertainty
+    -> bounded pace-conditional scenario (race_simulator.py)
+       no-future-stops green-flag assumption, not calibrated
+    -> frozen current-model prior research fusion (live_prior.py)
+       explicit blend coefficient, no automatic promotion
+    -> read-only API artifact + research-only Live Lab in React/Capacitor
 ```
 
 The source-spool and checkpoint paths are deliberately separate. Assembling
@@ -120,3 +126,88 @@ optional dependency are provisioned. Logs never print tokens.
    races, then freeze forecasts prospectively.
 5. Add a read-only live page using server-broadcast state. No provider token
    on the client. Show freshness, source provenance, lap number and data gaps.
+
+
+## Experimental inference and accuracy artifact sequence
+
+The source/observation/scenario/combined-prior path is implemented, but
+**not** currently backed by qualified historic in-race training data.
+The existing engine's older 2024 demo probability output cannot be
+used as a genuine pre-race 2026 probability. `scripts/export-prerace-prior.py`
+verifies a source ledger and refuses records not frozen before the race.
+The driver-ID to race-number mapping and actual race start must come from
+independent evidence and have complete coverage.
+
+Retain raw permitted provider JSON, then prepare a single normalized
+`{"session_key": N, "events": {"position": [...], "intervals": [...],
+"laps": [...], "pit": [...], "race_control": [...], "weather": [...]}}`
+object. Records must carry provider session keys, event timestamps and
+driver numbers. Historical laps are included only after their completion.
+For MQTT spools, each packet must retain its capture time, topic, provider
+sequence/document key and exact SHA-256 payload. The projection will reject
+missing full positions, lap-boundary disagreement, mismatched source times and
+conflicting sessions. `driver_number` is a provider identity, **not** a
+source-verified starter list; provide a separately verified entrant set.
+
+Run a specific as-of lap with a **synthetic, licensed, or historically
+permitted** source bundle:
+
+```bash
+python3 scripts/run-inrace-replay.py \
+  --source /path/to/cutoff-sourced-openf1.json \
+  --trace data/live/2026-singapore.jsonl \
+  --artifacts data/live/artifacts \
+  --race-id singapore --season 2026 --session-key <verified-key> \
+  --lap 25 --total-laps 62 --as-of "<source-cutoff-with-timezone>" \
+  --captured-at "<actual-capture-time-with-timezone>" \
+  --entrants "<all-source-verified-driver-numbers>" \
+  --source-type historical-archive
+```
+
+The run produces a hash-chained `LapTraceRecord` plus an immutable
+`InRaceRunArtifact`. If observed gaps, green-flag conditions and three
+validated complete laps per entrant are present, the conditional
+`green-pace-no-stops-v1` scenario records deterministic trial frequencies.
+Otherwise the artifact explicitly reports `insufficient-evidence`.
+Scenario frequencies are **not calibrated win probabilities**.
+
+An optional, independently frozen and timestamp-verified pre-race model
+forecast can be passed to the replay with `--prior /path/to/prior.json
+--scenario-weight 0.5`. The engine stores the original prior with the
+`asof-prior-green-scenario-v1` blend and recalculates the entire result
+when reading it through the API; it refuses changed prior or output bytes.
+Never tune the weight against today's eventual race result.
+
+Enable both read-only endpoints with
+`F1E_LAP_TRACE_PATH=/path/to/trace.jsonl` and
+`F1E_INRACE_ARTIFACT_DIR=/path/to/artifacts`:
+
+- `GET /api/races/singapore/lap-scenario?season=2026&lap=25`
+- `GET /api/races/singapore/lap-fusion?season=2026&lap=25`
+
+Both endpoints show clear unavailable/invalid states. The frontend
+**Live Lab** tab displays observed positions, green-pace scenario
+frequencies and, if a matching frozen pre-race artifact exists, a side-by-side
+model comparison. Default app operation continues on the pinned historical
+demo with no current 2026 race data; the Live Lab must therefore show
+unavailable unless the operator provides verified evidence and correct
+runtime configuration.
+
+`engine/f1engine/inrace_evaluation.py` scores each frozen checkpoint
+against its *later published* finishing result using exact winner hit,
+multiclass Brier and log loss. It compares frozen pre-race, currently
+leading driver, green continuation and research fusion **on identical
+entrant sets and as-of checkpoints**. This infrastructure measures accuracy
+but does not yet establish an improvement. Model weights require training on
+earlier races and evaluation on later, completely unseen races.
+
+## Production communications gate
+
+OpenF1 collector: authenticated MQTT/TLS 1.3, certificate validation,
+hostname verification and downgrade refusal are implemented. The default
+Compose stack is an isolated **localhost HTTP development/demo stack**
+with plaintext web-to-engine Docker traffic. It is not presently compliant
+with a universal TLS 1.3 network boundary. External HTTPS/WSS ingress and
+backend mutual TLS require separate deployment wiring and verified
+handshakes. No secure-production claim is made solely from HTTPS URLs in
+the mobile build configuration.

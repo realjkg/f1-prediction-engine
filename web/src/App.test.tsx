@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import App from "./App";
 import { installMockEngine, type MockEngine } from "./test/mockEngine";
 
-const TAB_LABELS = ["Race", "Models", "Evidence", "Brief", "Observability", "Settings"];
+const TAB_LABELS = ["Race", "Live Lab", "Models", "Evidence", "Brief", "Observability", "Settings"];
 
 describe("App shell (engine-backed)", () => {
   let engine: MockEngine;
@@ -19,7 +19,7 @@ describe("App shell (engine-backed)", () => {
     engine = installMockEngine();
   });
 
-  it("renders the six-tab bottom navigation with the round picker as the default route", async () => {
+  it("renders the seven-tab bottom navigation with the round picker as the default route", async () => {
     render(<App />);
     const tabs = await waitFor(() => within(screen.getByRole("navigation")).getAllByRole("button"));
     expect(tabs.map((tab) => tab.textContent)).toEqual(TAB_LABELS);
@@ -34,6 +34,15 @@ describe("App shell (engine-backed)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Models" }));
     expect(screen.getByRole("heading", { name: "Model Gauntlet" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Pick a round" })).toBeNull();
+  });
+
+  it("labels the live lab as research and refuses unsupported scenario data", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { name: "Pick a round" });
+    fireEvent.click(screen.getByRole("button", { name: "Live Lab" }));
+    expect(screen.getByRole("heading", { name: "In-race Lab" })).toBeTruthy();
+    expect(screen.getByText(/Scenario frequencies are not calibrated/)).toBeTruthy();
+    expect(await screen.findByText(/no simulation to show/i)).toBeTruthy();
   });
 
   it("carries the advisory evidence-basis banner from the served config", async () => {

@@ -39,6 +39,14 @@ class DriverOnTrack(WireModel):
     tire_age_laps: int | None = Field(default=None, ge=0)
     pit_stops: int | None = Field(default=None, ge=0)
     last_lap_seconds: float | None = Field(default=None, gt=0)
+    recent_lap_seconds: tuple[float, ...] = Field(default=(), max_length=8)
+
+    @field_validator("recent_lap_seconds")
+    @classmethod
+    def finite_recent_laps(cls, value: tuple[float, ...]) -> tuple[float, ...]:
+        if any(not math.isfinite(v) or v <= 0 for v in value):
+            raise ValueError("recent lap times must be positive and finite")
+        return value
 
     @field_validator("gap_to_leader_seconds", "last_lap_seconds")
     @classmethod
