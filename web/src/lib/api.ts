@@ -28,6 +28,7 @@ import type {
   RaceResultView,
   RacesView,
   InRaceRunArtifact,
+  UpdatedScenario,
 } from "../types";
 
 /**
@@ -54,6 +55,7 @@ export type EngineErrorCode =
   | "ARTIFACT_TAMPERED"
   | "LIVE_SCENARIO_UNAVAILABLE"
   | "SCENARIO_NOT_FOUND"
+  | "PRIOR_FUSION_NOT_FOUND"
   // client (this module)
   | "ENGINE_UNREACHABLE"
   | "RESPONSE_INVALID"
@@ -142,6 +144,7 @@ const ERROR_CODES = new Set<EngineErrorCode>([
   "ARTIFACT_TAMPERED",
   "LIVE_SCENARIO_UNAVAILABLE",
   "SCENARIO_NOT_FOUND",
+  "PRIOR_FUSION_NOT_FOUND",
   "ENGINE_UNREACHABLE",
   "RESPONSE_INVALID",
   "RESPONSE_NOT_OK",
@@ -161,6 +164,7 @@ export interface EngineClient {
   getPredictions(raceId: string, season: number): Promise<PredictionsView>;
   getRaceResult(raceId: string, season: number): Promise<RaceResultView>;
   getLapScenario(raceId: string, season: number, lap?: number): Promise<InRaceRunArtifact>;
+  getLapFusion(raceId: string, season: number, lap?: number): Promise<UpdatedScenario>;
   /**
    * The engine-computed round score — consensus flag from the ledger
    * server-side, streak_before from the pit-wall record. The client never
@@ -247,6 +251,12 @@ export function createEngineClient(
         `/api/races/${encodeURIComponent(raceId)}/lap-scenario?season=${season}` +
           (lap === undefined ? "" : `&lap=${lap}`),
         ["status", "checkpointSha256", "sourceSha256", "scenario", "modelReady", "advisoryOnly"],
+      ),
+    getLapFusion: (raceId, season, lap) =>
+      getJson<UpdatedScenario>(
+        `/api/races/${encodeURIComponent(raceId)}/lap-fusion?season=${season}` +
+          (lap === undefined ? "" : `&lap=${lap}`),
+        ["status", "checkpointSha256", "sourcePriorSha256", "candidates", "promoted"],
       ),
     getRaceResult: (raceId, season) =>
       getJson<RaceResultView>(
