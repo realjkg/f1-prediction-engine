@@ -13,12 +13,13 @@ application-layer messages, topic names and broker semantics are identical.
 The backend is the only holder of OpenF1 credentials. Do not expose tokens
 in the browser or native app.
 
-- Upstream endpoint: `mqtt.openf1.org:8883`, TLS.
+- Upstream endpoint: `mqtt.openf1.org:8883`, **native MQTT over TLS 1.3 or newer only**. The collector sets an SSL context minimum of TLS 1.3, verifies the public CA chain and broker hostname, and never enables `tls_insecure_set(True)`. **A TLS 1.2-only broker or runtime fails closed**, rather than triggering protocol downgrade or switching to WSS. OpenF1 documents MQTTS, but does not publish a guaranteed TLS 1.3 minimum. A real TLS 1.3 handshake and provider account test must be recorded before declaring compatibility.
 - Permitlisted topics: `v1/position`, `v1/intervals`, `v1/laps`,
   `v1/pit`, `v1/stints`, `v1/race_control`, `v1/weather`.
 - Subscriber QoS 0 minimizes overhead. Neither MQTT nor its QoS setting
   guarantees a complete historical trace when disconnections occur.
   Detect missing events and backfill using permitted historical REST access.
+- Deployment boundary: require TLS 1.3 where supported at externally exposed HTTPS/WSS ingress too, with trusted certificates, hostname checks, short-lived app sessions, origin/authorization checks, and no plaintext fallback. The current container's localhost HTTP is a loopback-only development interface, **not a public TLS endpoint**. The app has no public TLS termination or live WSS endpoint configured in this phase.
 - Later: a separate backend WebSocket broadcast can send validated state and
   model revisions to mobile/React. No reason to give each app client direct
   provider access or spend a subscription connection per device.
@@ -96,7 +97,10 @@ python3 scripts/record-openf1-mqtt.py \
   --max-messages 10000
 ```
 
-This collector stores original source payload text, SHA-256, provider event
+This collector requires TLS 1.3+ on the MQTT connection and rejects
+missing TLS 1.3 support without downgrade. No live connection or verified
+TLS 1.3 negotiation against the OpenF1 broker has been performed in CI.
+It stores original source payload text, SHA-256, provider event
 identity, and receive time. It never infers laps or writes win probabilities.
 The optional collector is **not active** until a licensed account and the
 optional dependency are provisioned. Logs never print tokens.
