@@ -496,3 +496,37 @@ export interface UpdatedScenario {
   promoted: false;
   advisoryOnly: true;
 }
+
+
+/** Audit-only, forward-scored in-race winner comparisons. Not deployed calibration. */
+export interface InRaceAccuracyReport {
+  revision: "event-forward-fusion-research-v1";
+  researchOnly: true;
+  modelPromotionAllowed: false;
+  minimumTrainingRaces: number;
+  candidateWeights: number[];
+  eligibleRaces: number;
+  scoredRaces: number;
+  unscoredRaces: number;
+  folds: Array<{
+    season: number;
+    race_id: string;
+    lap: number;
+    as_of: string;
+    last_training_result_at: string;
+    training_races: number;
+    selected_scenario_weight: number;
+    target_winner: number;
+    winner_choices: Record<string, number>;
+    multiclass_brier: Record<string, number>;
+    winner_log_loss: Record<string, number>;
+  }>;
+  pairedSummary: Record<string, {
+    races: number;
+    winnerHitRate: number;
+    meanMulticlassBrier: number;
+    meanWinnerLogLoss: number;
+  }>;
+  caveats: string[];
+  reportSha256: string;
+}
