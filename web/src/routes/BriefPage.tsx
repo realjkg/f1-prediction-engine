@@ -3,7 +3,7 @@ import { AdvisoryBanner } from "../components/AdvisoryBanner";
 import { ConsensusChip } from "../components/ConsensusChip";
 import { ResourceView } from "../components/EngineError";
 import { ProbabilityBars } from "../components/ProbabilityBars";
-import { topPicks } from "../lib/calls";
+import { isPredictionRecord, topPicks } from "../lib/calls";
 import { useEngineClient, useResource, type Resource } from "../lib/engine";
 import type { EngineClient } from "../lib/api";
 import { driverName } from "../lib/drivers";
@@ -19,6 +19,9 @@ import { raceKeyOf } from "../types";
 export function BriefPage() {
   const client = useEngineClient();
   const catalog = useResource(() => client.getRaces(), []);
+  // The ledger, not the catalog, says which rounds have a prediction record: the
+  // catalog spans 2020-2024 but the demo ledger only covers the scored season.
+  const ledger = useResource(() => client.getEvidence(0, 50), []);
   const config = useResource(() => client.getConfig(), []);
 
   return (
@@ -31,7 +34,23 @@ export function BriefPage() {
       <ResourceView
         resource={catalog}
         context="Race catalog"
-        ready={(view) => <BriefForRound races={view.races} client={client} config={config} />}
+        ready={(view) => (
+          <ResourceView
+            resource={ledger}
+            context="Prediction ledger"
+            ready={(page) => {
+              const covered = new Set(
+                page.records.filter(isPredictionRecord).map((record) =>
+                  raceKeyOf(record.race.season, record.race.round, record.race.raceId),
+                ),
+              );
+              const briefable = view.races.filter((race) =>
+                covered.has(raceKeyOf(race.season, race.round, race.raceId)),
+              );
+              return <BriefForRound races={briefable} client={client} config={config} />;
+            }}
+          />
+        )}
       />
     </section>
   );
@@ -44,7 +63,8 @@ interface BriefForRoundProps {
 }
 
 function BriefForRound({ races, client, config }: BriefForRoundProps) {
-  const [pickedIndex, setPickedIndex] = useState(0);
+  // Start on the most recent round that has a record, never on one that errors.
+  const [pickedIndex, setPickedIndex] = useState(Math.max(0, races.length - 1));
   const race = races[pickedIndex] ?? null;
   const prediction = useResource(
     () => (race ? client.getPredictions(race.raceId, race.season) : Promise.resolve(null)),
@@ -53,7 +73,11 @@ function BriefForRound({ races, client, config }: BriefForRoundProps) {
   );
 
   if (!race) {
-    return <p className="empty-state">No rounds in the catalog — run <code>make demo</code> first.</p>;
+    return (
+      <p className="empty-state">
+        No prediction records in the served ledger yet — run <code>make demo</code> to generate them.
+      </p>
+    );
   }
 
   return (

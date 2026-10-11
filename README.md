@@ -125,13 +125,15 @@ requires a future finish-order model and independent validation.
 ## Pit Wall — the game on top
 
 **Race Rewind** is the core loop: pick any completed 2020–2024 round, read the
-call sheet (qualifying grid + form — *this is all the machine knows*), lock
-P1/P2/P3 inside a 30-second timer, and get the reveal: your podium vs the
-actual result vs every model's card, with engine-computed scoring (the client
-never invents scores — they come from `GET /api/races/{raceId}/score`).
+call sheet (the field the models scored — the API serves no grid order or
+form, and the sheet says so), lock P1/P2/P3 inside a 30-second timer, and get
+the reveal: your podium vs the actual result vs every model's card, with
+engine-computed scoring (the client never invents scores — they come from
+`GET /api/races/{raceId}/score`).
 Scoring: +5 per position-exact podium hit, +3 for calling the winner, +1 for a
 near miss (your pick finished P4) — 0–18 a round, **doubled on Coin Flip
-Rounds** where the ensemble flags `LOW_CONSENSUS`, because a split machine
+Rounds** where the ensemble flags `LOW_CONSENSUS` (shown in the app as *Models
+disagree*), because a split machine
 means your gut is the only edge. Exact hits extend a streak (flame at 3); six
 badges ship, from *First Exact Podium* to *Data Nerd*. Your pit-wall record
 lives in `localStorage` — no accounts in Milestone 1. Hindsight is
@@ -148,7 +150,10 @@ claim ships with its receipts:
   and tampering is detectable.
 - **Backtest metrics, not vibes** — expanding-window over 2024: winner hit
   rate, podium@3, Brier score, per model and ensemble. The predictions in the
-  ledger are exactly the ones the backtest scored.
+  ledger are exactly the ones the backtest scored. The Models screen shows hit
+  rates as whole rounds ("6 of 24") beside a blind-guess row (about 5% for a
+  winner pick, 0.95 Brier for a uniform forecast on a 20-car grid), so each
+  number has a reference point.
 - **Deterministic runs** — two `make demo` runs produce byte-identical
   ledgers (fixed seeds, pinned dataset, fixture briefs; no wall-clock time in
   evidence). Proof: [docs/evidence/determinism-run.md](docs/evidence/determinism-run.md).
@@ -158,9 +163,12 @@ claim ships with its receipts:
 
 ## PWA install
 
-The web app is an installable, mobile-first PWA (manifest + service worker;
-single column, bottom tabs; routes: Race, Models, Evidence, Brief,
-Observability, Settings).
+The web app is an installable, mobile-first PWA (manifest + service worker).
+On phones it is a single column with bottom tabs; at 900px and wider the tabs
+become a left rail and the reveal and ledger use columns. It follows the system
+light or dark setting, keeps tap targets at 44px and clear of the iOS home
+indicator, and skips confetti under reduced motion. Routes: Race, Live Lab,
+Models, Evidence, Brief, Observability, Inventory, Settings.
 
 - **Android/Chrome (desktop):** open the served app → install prompt, or
   menu → *Install app* / *Add to Home screen*.
@@ -202,7 +210,7 @@ are explicitly out of scope for Milestone 1.
 | --- | --- |
 | `engine/f1engine/` | FastAPI app + implemented engine: ingestion, features, models, ensemble, scoring, evidence ledger, brief, observability |
 | `engine/tests/` | pytest — one flat file per domain |
-| `web/` | Vite + React + TS PWA (Race Rewind, Model Gauntlet, Evidence Room, Brief, Observability, Settings) + Capacitor shells |
+| `web/` | Vite + React + TS PWA (Race Rewind, Live Lab, Model Gauntlet, Evidence Room, Brief, Observability, Inventory, Settings) + Capacitor shells |
 | `data/snapshot/` | Pinned dataset (`DATASET_VERSION`, `provenance.json`, parquet) + `DATA_LICENSE.md` |
 | `docs/evidence/` | Recorded integration evidence (determinism runs) |
 | `scripts/` | `demo.py` (one-command demo), `refresh-data.py` (offline snapshot regen), `generate-driver-directory.py` |

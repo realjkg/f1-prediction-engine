@@ -1,0 +1,58 @@
+/*
+ * Design tokens: colors, motion, and layout constants in one place. Dark is the
+ * default (the pit wall); a light theme follows the system setting. Components
+ * read only these variables, so a theme is a second set of values, not new CSS.
+ *
+ * Text pairs below meet WCAG 2.2 AA (4.5:1). The fixed competitor colors in
+ * lib/colors.ts are accents only and always appear beside a printed name or value.
+ */
+
+:root {
+  color-scheme: dark light;
+
+  --color-bg: #0b0f14;
+  --color-surface: #131a22;
+  --color-surface-raised: #1a232e;
+  --color-border: #24303d;
+  --color-text: #e8eef4;
+  --color-text-muted: #8fa3b5;
+  --color-accent: #2dd4bf;
+  --color-accent-dim: #14433c;
+  --color-warn: #f59e0b;
+  --color-danger: #ef4444;
+  --color-hue-teal: #2dd4bf;
+  --color-hue-papaya: #ff8c42;
+  --color-hue-crimson: #e10600;
+  --color-hue-silver: #cbd5e1;
+  --nav-height: 3.5rem;
+  --speed-fast: 180ms;
+  --speed-reveal: 450ms;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-bg: #f4f6f8;
+    --color-surface: #ffffff;
+    --color-surface-raised: #e8edf2;
+    --color-border: #c9d3dd;
+    --color-text: #16202b;
+    --color-text-muted: #4a5b6c;
+    --color-accent: #0f766e;
+    --color-accent-dim: #d3f0ea;
+    --color-warn: #a14a07;
+    --color-danger: #b91c1c;
+    --color-hue-teal: #0f766e;
+    --color-hue-papaya: #b84a0b;
+    --color-hue-crimson: #c20500;
+    --color-hue-silver: #64748b;
+  }
+
+  /* Bright accent fills are thin on a light track; outline them so the bar
+     edge stays visible. Values are always printed beside the bar. */
+  .prob-bar-fill,
+  .comparison-fill,
+  .replay-dot {
+    outline: 1px solid rgb(22 32 43 / 0.45);
+    outline-offset: -1px;
+  }
+}

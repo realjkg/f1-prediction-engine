@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { formatPercent } from "../lib/baseline";
 import { driverCode, driverName } from "../lib/drivers";
 import type { RoundCall, DigestPick } from "../types";
 
@@ -13,6 +14,8 @@ interface ModelCardProps {
   landed?: Record<string, number> | null;
   /** Emphasis treatment (the player's own card). */
   highlight?: boolean;
+  /** Fixed competitor color, drawn as a left stripe. An accent only; the title names the competitor. */
+  accent?: string;
   footer?: ReactNode;
 }
 
@@ -30,7 +33,16 @@ function LandedMark({ position, slot }: { position: number | null | undefined; s
  * One competitor's reveal card: podium call with landed marks and the win
  * pick. Used for the player's lock and for each model + the ensemble.
  */
-export function ModelCard({ title, subtitle, call, winPick, landed, highlight = false, footer }: ModelCardProps) {
+export function ModelCard({
+  title,
+  subtitle,
+  call,
+  winPick,
+  landed,
+  highlight = false,
+  accent,
+  footer,
+}: ModelCardProps) {
   const slots: [string, string][] = call
     ? [
         ["P1", call.p1],
@@ -39,7 +51,10 @@ export function ModelCard({ title, subtitle, call, winPick, landed, highlight = 
       ]
     : [];
   return (
-    <article className={`model-card${highlight ? " is-highlight" : ""}`}>
+    <article
+      className={`model-card${highlight ? " is-highlight" : ""}${accent ? " has-accent" : ""}`}
+      style={accent ? ({ "--card-accent": accent } as CSSProperties) : undefined}
+    >
       <header className="model-card-head">
         <h3>{title}</h3>
         {subtitle && <span className="model-card-subtitle">{subtitle}</span>}
@@ -62,7 +77,7 @@ export function ModelCard({ title, subtitle, call, winPick, landed, highlight = 
       )}
       {winPick && (
         <p className="model-card-win">
-          Win call: {driverName(winPick.driverId)} — {Math.round(winPick.probability * 100)}%
+          Win call: {driverName(winPick.driverId)} — <span className="num">{formatPercent(winPick.probability)}</span>
         </p>
       )}
       {footer}

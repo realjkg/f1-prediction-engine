@@ -27,6 +27,13 @@ function formatClock(seconds: number): string {
   return `0:${String(seconds).padStart(2, "0")}`;
 }
 
+/** Spoken only at the 10-second warning and at zero; silent otherwise. */
+export function timerAnnouncement(secondsLeft: number): string {
+  if (secondsLeft === 10) return "10 seconds left. You can still lock your call at zero.";
+  if (secondsLeft === 0) return "Time is up. Your call stands whenever you're ready.";
+  return "";
+}
+
 /**
  * The call sheet — "this is the field the machine called." Tap-tap-tap a
  * podium; the 30-second countdown never robs the call (picking stays
@@ -88,9 +95,13 @@ export function CallSheetView({
         <p className="call-sheet-frame">
           The field the machine called. No grid order is served — pick your podium.
         </p>
-        <p className="call-sheet-timer" aria-live="polite">
+        <p className="call-sheet-timer">
           <span className={`timer${secondsLeft <= 10 ? " is-low" : ""}`}>{formatClock(secondsLeft)}</span>
           {secondsLeft === 0 && <span className="timer-note"> — your call stands whenever you're ready</span>}
+        </p>
+        {/* Screen readers hear two milestones, not a tick every second. */}
+        <p className="visually-hidden" role="status" aria-live="polite">
+          {timerAnnouncement(secondsLeft)}
         </p>
       </header>
 

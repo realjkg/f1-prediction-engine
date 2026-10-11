@@ -162,8 +162,19 @@ describe("Model Gauntlet (engine-backed)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Models" }));
     const panel = await screen.findByRole("region", { name: "Backtest accuracy" });
     // Numbers come from the BacktestRecord in /api/evidence — never invented.
-    expect(within(panel).getAllByText("50%").length).toBeGreaterThan(0);
+    // Shown as a fraction of rounds, with the percentage as a footnote.
+    expect(within(panel).getAllByText("1 of 2 (50%)").length).toBeGreaterThan(0);
     expect(within(panel).getByText(/skipped for missing data/)).toBeTruthy();
+  });
+
+  it("shows a blind-guess baseline under the backtest so the numbers have a reference", async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Models" }));
+    const panel = await screen.findByRole("region", { name: "Backtest accuracy" });
+    const baseline = within(panel).getByText("Blind guess").closest("tr");
+    expect(baseline).toBeTruthy();
+    expect(within(baseline as HTMLElement).getByText("≈5%")).toBeTruthy();
+    expect(within(baseline as HTMLElement).getByText("0.95")).toBeTruthy();
   });
 
   it("shows the empty state before any round is played", async () => {

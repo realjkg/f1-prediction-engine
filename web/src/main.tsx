@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { Capacitor } from "@capacitor/core";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import "./tokens.css";
 import "./styles.css";
 
 const rootElement = document.getElementById("root");
