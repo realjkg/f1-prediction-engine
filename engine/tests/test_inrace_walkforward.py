@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
+from pathlib import Path
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from f1engine.inrace_evaluation import FrozenEvaluationCase
-from f1engine.inrace_walkforward import evaluate_forward_weights
+from f1engine.inrace_walkforward import (
+    evaluate_forward_weights,
+    read_forward_report,
+    write_forward_report,
+)
 from f1engine.lap_trace import DriverOnTrack, LapCheckpoint, LapTraceRecord
 from f1engine.live_prior import PreRacePrior, combine_prerace_and_lap
 from f1engine.race_simulator import simulate_green_pace
@@ -141,3 +147,19 @@ def test_training_floor_cannot_be_weakened() -> None:
         evaluate_forward_weights([frozen_case(i) for i in range(5)], minimum_training_races=1)
     with pytest.raises(ValueError, match="insufficient"):
         evaluate_forward_weights([frozen_case(i) for i in range(4)])
+
+
+def test_report_is_immutable_and_detects_modification(tmp_path: Path) -> None:
+    report = evaluate_forward_weights([frozen_case(i) for i in range(7)])
+    path = tmp_path / "research-report.json"
+    assert write_forward_report(path, report) == path
+    assert read_forward_report(path)["reportSha256"] == report.report_sha256
+    # Exact same evidence is repeatable, but historical metrics cannot be rewritten.
+    write_forward_report(path, report)
+    document = json.loads(path.read_text())
+    document["pairedSummary"]["pre-race"]["winnerHitRate"] = 1.0
+    path.write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="digest"):
+        read_forward_report(path)
+    with pytest.raises(ValueError, match="digest"):
+        write_forward_report(path, report)
