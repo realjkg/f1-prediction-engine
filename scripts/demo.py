@@ -21,10 +21,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import uvicorn
-from f1engine.app import APP_TITLE, APP_VERSION, create_app
+from f1engine.app import APP_TITLE, APP_VERSION, ApiSettings, create_app
 from f1engine.backtest import (
     METRIC_DEFINITIONS,
     BacktestResult,
@@ -61,12 +62,21 @@ WEIGHTS: dict[str, float] = {"m1-gbm": 1.0, "m2-logit": 1.0, "m3-form": 1.0}
 EVIDENCE_BASIS = "REAL MODELS — PINNED DATASET 2020–2024 — NO LIVE INFERENCE"
 
 
+def evidence_basis_for(dataset: PinnedDataset) -> str:
+    """Describe the actual verified seasons, never an assumed historic range."""
+    seasons = dataset.provenance.snapshot.seasons.replace("-", "–")
+    return f"REAL MODELS — PINNED DATASET {seasons} — NO LIVE INFERENCE"
+
+
 def _log(stage: str, message: str) -> None:
     print(f"[demo:{stage}] {message}", flush=True)
 
 
 def predict_and_prove(
-    dataset: PinnedDataset, ledger_path: Path, season: int
+    dataset: PinnedDataset,
+    ledger_path: Path,
+    season: int,
+    evidence_basis: str = EVIDENCE_BASIS,
 ) -> BacktestResult:
     """Run the expanding window and append evidence for it.
 
@@ -88,7 +98,7 @@ def predict_and_prove(
             backtest_round.verdict,
             dataset,
             round_by_id[backtest_round.race_id],
-            EVIDENCE_BASIS,
+            evidence_basis,
         )
         append_record(ledger_path, record)
         emit(
@@ -105,7 +115,7 @@ def predict_and_prove(
         metrics=aggregate_rounds(result.rounds),
         metric_definitions=METRIC_DEFINITIONS,
         skipped_rounds=result.skipped,
-        evidence_basis=EVIDENCE_BASIS,
+        evidence_basis=evidence_basis,
     )
     append_record(ledger_path, backtest_record)
     emit(
@@ -190,15 +200,23 @@ def verify(data_dir: Path) -> PinnedDataset:
     return dataset
 
 
-def serve(port: int, host: str) -> None:
+def serve(
+    port: int,
+    host: str,
+    evidence_basis: str = EVIDENCE_BASIS,
+    data_dir: Path | None = None,
+) -> None:
     """Serve the engine API until interrupted, behind the evidence banner."""
-    banner = f"{APP_TITLE} v{APP_VERSION} — {EVIDENCE_BASIS}"
+    banner = f"{APP_TITLE} v{APP_VERSION} — {evidence_basis}"
     print(f"[demo:serve] {banner}", flush=True)
     print(
         f"[demo:serve] listening on http://{host}:{port} (docs at /docs, metrics at /metrics)",
         flush=True,
     )
-    uvicorn.run(create_app(), host=host, port=port, log_level="warning")
+    settings = ApiSettings.from_env()
+    if data_dir is not None:
+        settings = replace(settings, data_dir=data_dir)
+    uvicorn.run(create_app(settings), host=host, port=port, log_level="warning")
 
 
 def run_demo(
@@ -221,7 +239,7 @@ def run_demo(
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     dataset = verify(data_dir)
     _log("predict", f"expanding-window predictions for {season}, per-model + ensemble, into the ledger")
-    result = predict_and_prove(dataset, ledger_path, season)
+    result = predict_and_prove(dataset, ledger_path, season, evidence_basis_for(dataset))
     metrics = aggregate_rounds(result.rounds)
     scored = ", ".join(f"{key}={value.winner_hit_rate:.2f}" for key, value in metrics.items())
     _log("prove", f"backtest: {len(result.rounds)} rounds scored — winner hit rate {scored}")
@@ -254,7 +272,12 @@ def main(argv: list[str] | None = None) -> int:
 
     run_demo(args.data_dir, args.ledger, args.season, brief=not args.no_brief)
     if not args.no_serve:
-        serve(args.port, args.host)
+        serve(
+            args.port,
+            args.host,
+            evidence_basis_for(load_snapshot(args.data_dir)),
+            data_dir=args.data_dir,
+        )
     return 0
 
 

@@ -28,6 +28,7 @@ Usage:
     python3 scripts/refresh-data.py [--seasons 2020-2024]
         [--data-dir data/snapshot] [--cache-dir .cache/jolpica]
         [--dataset-id 2026.10.0] [--min-interval 0.25] [--budget 500]
+        [--as-of 2026-10-10] [--fresh-seasons 2026]
 """
 
 from __future__ import annotations
@@ -190,7 +191,9 @@ class CachingClient:
         fetch_fn: Callable[[str], HttpResponse] = default_fetch,
         sleep_fn: Callable[[float], None] = time.sleep,
         now_fn: Callable[[], datetime] = lambda: datetime.now(UTC),
+        fresh_seasons: set[int] | None = None,
     ) -> None:
+        self._fresh_seasons = fresh_seasons or set()
         self._base_url = base_url.rstrip("/")
         self._cache_dir = cache_dir
         self._limiter = rate_limiter
@@ -205,7 +208,13 @@ class CachingClient:
         """Fetch `{base}/{path}?{params}` — (body, fetchedAt ISO) cache-first."""
         url = f"{self._base_url}/{path}?{params}"
         cache_path = self._cache_path(url)
-        if cache_path.exists():
+        # An in-progress season must not retain old schedule/results responses
+        # across refresh runs. Historical seasons remain cache-first.
+        refresh_this_path = any(
+            path == f"{season}.json" or path.startswith(f"{season}/")
+            for season in self._fresh_seasons
+        )
+        if cache_path.exists() and not refresh_this_path:
             entry = json.loads(cache_path.read_text(encoding="utf-8"))
             self.cache_hits += 1
             return entry["body"], entry["fetchedAt"]
@@ -463,7 +472,6 @@ def fetch_season(
     schedule_races, fetched_at = fetch_paginated_races(client, f"{season}.json")
     if not schedule_races:
         raise UnexpectedShape(f"empty schedule for season {season}")
-
     results_by_round: dict[int, list[dict]] = {}
     qualifying_by_round: dict[int, list[dict]] = {}
     sprints_by_round: dict[int, list[dict]] = {}
@@ -745,6 +753,7 @@ def build_provenance(
     base_url: str,
     endpoint_templates: list[str],
     seasons: list[int],
+    as_of: date | None = None,
 ) -> dict:
     seasons_label = f"{seasons[0]}-{seasons[-1]}" if seasons else ""
     return {
@@ -755,6 +764,7 @@ def build_provenance(
             "seasons": seasons_label,
             "format": "parquet",
             "sha256": combined_table_hash(table_hashes),
+            "asOfDate": as_of.isoformat() if as_of else None,
         },
         "tables": {
             name: {"rows": len(tables[name]), "sha256": table_hashes[name]}
@@ -781,7 +791,15 @@ def build_provenance(
                 "license": "non-commercial free tier",
             },
         ],
-        "dataLimitations": DATA_LIMITATIONS,
+        "dataLimitations": DATA_LIMITATIONS + (
+            [
+                (
+                    "race results include only races dated strictly before "
+                    f"{as_of.isoformat()}"
+                )
+            ]
+            if as_of else []
+        ),
     }
 
 
@@ -793,11 +811,12 @@ def run_refresh(
     dataset_id: str,
     min_interval: float,
     budget: int,
-    as_of: date | None = None,
     fetch_fn: Callable[[str], HttpResponse] = default_fetch,
     sleep_fn: Callable[[float], None] = time.sleep,
     wall_now_fn: Callable[[], float] = time.time,
     clock_now_fn: Callable[[], datetime] = lambda: datetime.now(UTC),
+    as_of: date | None = None,
+    fresh_seasons: set[int] | None = None,
 ) -> dict:
     """Run the full refresh; returns a summary dict for reporting/tests."""
     client = CachingClient(
@@ -808,6 +827,7 @@ def run_refresh(
         fetch_fn=fetch_fn,
         sleep_fn=sleep_fn,
         now_fn=clock_now_fn,
+        fresh_seasons=fresh_seasons,
     )
 
     tables, fetched_ats = build_table_rows(seasons, client, as_of=as_of)
@@ -831,6 +851,7 @@ def run_refresh(
         base_url=base_url,
         endpoint_templates=endpoint_templates,
         seasons=seasons,
+        as_of=as_of,
     )
     (data_dir / "provenance.json").write_text(
         json.dumps(provenance, indent=2) + "\n", encoding="utf-8"
@@ -872,21 +893,25 @@ def main(argv: list[str] | None = None) -> int:
         "--seasons", default=DEFAULT_SEASONS, help="e.g. 2020-2024 or 2020,2021"
     )
     parser.add_argument("--data-dir", default="data/snapshot")
-    parser.add_argument(
-        "--as-of",
-        help="Exclusive YYYY-MM-DD race-result cutoff for partial seasons; race date must be earlier",
-    )
     parser.add_argument("--cache-dir", default=".cache/jolpica")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument("--dataset-id", default=DEFAULT_DATASET_ID)
     parser.add_argument("--min-interval", type=float, default=DEFAULT_MIN_INTERVAL)
     parser.add_argument("--budget", type=int, default=DEFAULT_BUDGET)
+    parser.add_argument(
+        "--as-of", type=date.fromisoformat, default=None,
+        help="exclusive YYYY-MM-DD cutoff for including fully finished races",
+    )
+    parser.add_argument(
+        "--fresh-seasons", default="",
+        help="seasons whose cached API responses are always re-fetched (e.g. 2026)",
+    )
     args = parser.parse_args(argv)
 
     seasons = parse_seasons(args.seasons)
     data_dir = Path(args.data_dir)
     cache_dir = Path(args.cache_dir)
-    as_of = date.fromisoformat(args.as_of) if args.as_of else None
+    as_of = args.as_of
     if max(seasons) >= 2025 and data_dir == Path("data/snapshot"):
         parser.error("current-era seasons require --data-dir separate from the certified 2020–2024 baseline")
     if max(seasons) >= 2026 and as_of is None:
@@ -902,6 +927,7 @@ def main(argv: list[str] | None = None) -> int:
             min_interval=args.min_interval,
             budget=args.budget,
             as_of=as_of,
+            fresh_seasons=set(parse_seasons(args.fresh_seasons)) if args.fresh_seasons else set(),
         )
     except BudgetExhausted as error:
         print(f"JOLPICA_BUDGET_EXHAUSTED — stopping cleanly: {error}")
@@ -913,6 +939,7 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_STOPPED
 
     print("refresh complete")
+    print(f"  cutoff         : {args.as_of} (exclusive; same-day races excluded)")
     print(f"  dataset id     : {summary['datasetId']}")
     print(f"  dataset sha256 : {summary['datasetSha256']}")
     print(f"  fetched at     : {summary['fetchedAt']}")

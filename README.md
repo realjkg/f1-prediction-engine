@@ -43,6 +43,42 @@ Other entry points: `make test` (pytest + vitest), `make lint`
 (ruff + tsc --noEmit), `make refresh-data` (offline tool to regenerate the
 pinned snapshot from Jolpica — rate-aware, resumable, never a runtime step).
 
+## Fall 2026 dataset and ML backtest (opt-in)
+
+The committed 2020–2024 snapshot and its two-run determinism proof remain
+unchanged. To prepare a **separate** current-season dataset through **October 9,
+2026**, inclusive (strictly before October 10), run:
+
+```bash
+make refresh-fall-2026
+make demo-fall-2026
+npm --prefix web run dev
+```
+
+The refresh command selects 2020–2026 and `--as-of 2026-10-10`: it
+**excludes races dated October 10 or later**, including the uncompleted
+Singapore Grand Prix on October 11. It re-fetches all 2026 source responses
+on each run so API caches cannot indefinitely hide updated classifications.
+Older seasons remain cached to stay within Jolpica's hourly rate budget.
+It generates a second, hash-validated dataset at
+`data/snapshot-fall-2026/` (ignored by Git, not automatically published)
+and the engine scores completed 2026 races with that snapshot. The web API
+and CLI use the same selected dataset rather than silently serving 2024.
+
+The October 4, 2026 **Bahrain Grand Prix in Malaysia** was held at **Sepang**,
+not its usual Sakhir venue. For prospective 2026 track-history features, use
+the actual `circuit_id`, not the race's event name; that model change requires
+a separately validated calibration/backtest revision. Race forecasts must
+incorporate current-season qualifying and weather only if those observations
+were available **before** the prediction timestamp. Today's baseline models
+use previous-round form and do **not** ingest those session-level signals.
+
+The rolling snapshot is an offline refresh of completed results, **not**
+live inference. The source licensing remains noncommercial unless separate
+rights are secured; see `data/snapshot/DATA_LICENSE.md`. Review provenance,
+completed-round coverage, engine calibration and regression tests before
+promoting a new snapshot as the customer-facing default.
+
 ## Versioned training data engine
 
 `make training-store` materializes the *hash-verified* snapshot, its

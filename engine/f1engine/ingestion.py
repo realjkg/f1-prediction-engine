@@ -205,6 +205,7 @@ class SnapshotIdentity(BaseModel):
     seasons: str = Field(min_length=1)
     format: str = Field(min_length=1)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    asOfDate: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 class Provenance(BaseModel):
