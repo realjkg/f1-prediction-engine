@@ -16,6 +16,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from f1engine.evidence import PredictionRecord
 from f1engine.lap_trace import LapTraceRecord
 from f1engine.race_simulator import InRaceScenario
 from f1engine.wire import WireModel
@@ -79,6 +80,9 @@ class UpdatedScenario(WireModel):
     status: Literal["unqualified-blend"] = "unqualified-blend"
     checkpoint_sha256: str
     source_prior_sha256: str
+    source_model_artifact_sha256: str
+    source_dataset_sha256: str
+    prior_frozen_at: str
     model_revision: str
     lap: int
     total_laps: int
@@ -142,12 +146,19 @@ def combine_prerace_and_lap(
         "scenario": scenario.scenario_sha256,
         "prior": prior_sha,
         "candidateRevision": FUSION_REVISION,
+        "modelRevision": prior.model_revision,
+        "modelArtifactSha256": prior.model_artifact_sha256,
+        "datasetSha256": prior.dataset_sha256,
+        "frozenAt": prior.frozen_at.isoformat(),
         "scenarioWeight": green_scenario_weight,
         "drivers": [b.model_dump(mode="json", by_alias=True) for b in blended],
     }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return UpdatedScenario(
         checkpoint_sha256=checkpoint.record_sha256,
         source_prior_sha256=prior_sha,
+        source_model_artifact_sha256=prior.model_artifact_sha256,
+        source_dataset_sha256=prior.dataset_sha256,
+        prior_frozen_at=prior.frozen_at.isoformat(),
         model_revision=prior.model_revision,
         lap=observation.lap,
         total_laps=observation.total_laps,
@@ -160,4 +171,46 @@ def combine_prerace_and_lap(
             "Evaluate proper scores against pre-race and running-order baselines."
         ),
         output_sha256=result_hash,
+    )
+
+
+def prior_from_existing_engine_record(
+    record: PredictionRecord, *, season: int, race_id: str,
+    session_key: int, race_start_at: datetime,
+    driver_number_by_id: dict[str, int],
+) -> PreRacePrior:
+    """Adapt a verified, genuinely pre-race *existing engine* ledger record.
+
+    The caller must first run verify_chain(...) over the source ledger.
+    Ledger-generated demos (often generated after a historical race) refuse
+    this conversion: their generatedAt is not an independently timestamped
+    pre-race issue time. A mapped driver number is evidence, not inference.
+    """
+    if (record.race.season, record.race.race_id) != (season, race_id):
+        raise PriorEvidenceError("ledger prediction belongs to another race")
+    if not record.record_sha256 or len(record.record_sha256) != 64:
+        raise PriorEvidenceError("verified ledger record digest required")
+    probability = record.ensemble.winner
+    if set(probability) != set(driver_number_by_id):
+        raise PriorEvidenceError("complete driver identifier mapping required")
+    numbers = list(driver_number_by_id.values())
+    if len(numbers) != len(set(numbers)) or any(v < 1 for v in numbers):
+        raise PriorEvidenceError("driver numbers must be unique and positive")
+    try:
+        generated_at = datetime.fromisoformat(record.generated_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise PriorEvidenceError("invalid ledger generation timestamp") from exc
+    if generated_at.tzinfo is None:
+        raise PriorEvidenceError("ledger generation time must include timezone")
+    return PreRacePrior(
+        season=season, race_id=race_id, session_key=session_key,
+        model_revision="f1engine-ensemble-ledger-v1",
+        model_artifact_sha256=record.record_sha256,
+        dataset_sha256=record.dataset.sha256,
+        source_issued_at=generated_at, frozen_at=generated_at,
+        race_start_at=race_start_at,
+        driver_win_probabilities={
+            driver_number_by_id[driver_id]: p
+            for driver_id, p in probability.items()
+        },
     )
