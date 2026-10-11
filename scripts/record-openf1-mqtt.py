@@ -26,6 +26,21 @@ PORT = 8883
 MAX_MESSAGE_BYTES = 512_000
 
 
+def build_tls_context() -> ssl.SSLContext:
+    """Require authenticated TLS 1.3+; never negotiate an older protocol.
+
+    If Python/OpenSSL lacks TLS 1.3 support, refuse collection rather than
+    weakening certificate validation or silently falling back to TLS 1.2.
+    """
+    if not ssl.HAS_TLSv1_3:
+        raise RuntimeError("TLS 1.3 is required; collector OpenSSL lacks support")
+    context = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
+    context.minimum_version = ssl.TLSVersion.TLSv1_3
+    context.verify_mode = ssl.CERT_REQUIRED
+    context.check_hostname = True
+    return context
+
+
 def normalize_message(
     topic: str, payload: bytes, session_key: int, captured_at: datetime,
 ) -> dict[str, object] | None:
@@ -103,7 +118,10 @@ def main(argv: list[str] | None = None) -> int:
     with args.output.open("a", encoding="utf-8") as out:
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, protocol=mqtt.MQTTv311)
         client.username_pw_set(username=user, password=token)
-        client.tls_set(cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS_CLIENT)
+        # Native MQTT over TLS only: validate CA chain + broker hostname.
+        # TLS 1.3 is mandatory; failed negotiation is a hard error.
+        client.tls_set_context(build_tls_context())
+        client.tls_insecure_set(False)
         client.reconnect_delay_set(min_delay=1, max_delay=30)
 
         def on_connect(_client, _userdata, _flags, reason_code, _properties):
