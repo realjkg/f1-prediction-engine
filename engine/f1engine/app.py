@@ -76,6 +76,7 @@ from f1engine.lap_trace import LapTraceError, LapTraceRecord, get_lap_observatio
 from f1engine.live_prior import UpdatedScenario
 from f1engine.observability import EventStatus, Signal
 from f1engine.scoring import CallScore, PitCall, score_call_sheet
+from f1engine.supply_chain import SupplyChainError, SupplyChainView, read_supply_chain
 from f1engine.wire import WireModel
 
 APP_TITLE = "F1 Prediction Engine"
@@ -109,6 +110,8 @@ class ApiSettings:
     ledger_path: Path = Path(DEFAULT_LEDGER_PATH)
     lap_trace_path: Path | None = None
     inrace_artifact_dir: Path | None = None
+    sbom_path: Path = Path("data/sbom/f1-sbom.cdx.json")
+    sbom_source_root: Path = Path(".")
     inrace_accuracy_report: Path | None = None
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
     brief_mode: Literal["fixture", "live"] = "fixture"
@@ -132,6 +135,8 @@ class ApiSettings:
             if environ.get("F1E_INRACE_ARTIFACT_DIR") else None,
             inrace_accuracy_report=Path(environ["F1E_INRACE_ACCURACY_REPORT"])
             if environ.get("F1E_INRACE_ACCURACY_REPORT") else None,
+            sbom_path=Path(environ.get("F1E_SBOM_PATH", "data/sbom/f1-sbom.cdx.json")),
+            sbom_source_root=Path(environ.get("F1E_SBOM_SOURCE_ROOT", ".")),
             cors_origins=origins,
             brief_mode=_brief_mode(environ.get("F1E_BRIEF_MODE")),
         )
@@ -870,6 +875,14 @@ def create_app(
         """Observability events from the (injected) closed-signal store."""
         served = list(events.list_events())
         return EventsView(events=served, total=len(served))
+
+    @app.get("/api/supply-chain")
+    def software_inventory() -> SupplyChainView:
+        """Read-only lockfile inventory, not a production release attestation."""
+        try:
+            return read_supply_chain(resolved.sbom_path, source_root=resolved.sbom_source_root)
+        except SupplyChainError as error:
+            raise _error(503, error.code, str(error)) from error
 
     @app.get("/api/config")
     def engine_config() -> ConfigView:

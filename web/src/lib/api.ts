@@ -30,6 +30,7 @@ import type {
   InRaceRunArtifact,
   UpdatedScenario,
   InRaceAccuracyReport,
+  SupplyChainView,
 } from "../types";
 
 /**
@@ -62,7 +63,9 @@ export type EngineErrorCode =
   // client (this module)
   | "ENGINE_UNREACHABLE"
   | "RESPONSE_INVALID"
-  | "RESPONSE_NOT_OK";
+  | "RESPONSE_NOT_OK"
+  | "SBOM_INVALID"
+  | "SBOM_UNAVAILABLE";
 
 export class ApiError extends Error {
   readonly code: EngineErrorCode;
@@ -153,6 +156,8 @@ const ERROR_CODES = new Set<EngineErrorCode>([
   "ENGINE_UNREACHABLE",
   "RESPONSE_INVALID",
   "RESPONSE_NOT_OK",
+  "SBOM_INVALID",
+  "SBOM_UNAVAILABLE",
 ]);
 
 /** Coerce an unknown throw into an ApiError — unknown throws become RESPONSE_INVALID. */
@@ -186,6 +191,7 @@ export interface EngineClient {
   getEvidence(offset: number, limit: number): Promise<EvidencePageView>;
   getEvents(): Promise<EventsView>;
   getConfig(): Promise<ConfigView>;
+  getSupplyChain(): Promise<SupplyChainView>;
   getMetrics(): Promise<string>;
   /**
    * The ledger's backtest record — measured accuracy for the Gauntlet.
@@ -288,6 +294,10 @@ export function createEngineClient(
       ]),
     getEvents: () => getJson<EventsView>("/api/events", ["events", "total"]),
     getConfig: () => getJson<ConfigView>("/api/config", ["engineVersion", "briefMode"]),
+    getSupplyChain: () => getJson<SupplyChainView>("/api/supply-chain", [
+      "status", "specVersion", "totalComponents", "ecosystemCounts",
+      "sbomSha256", "components", "limitations", "releaseReady",
+    ]),
     getMetrics: async () => {
       const response = await fetchImpl(`${baseUrl}/metrics`, {
         headers: { accept: "text/plain" },

@@ -43,6 +43,10 @@ function errorHeadline(error: ApiError): string {
     case "ARTIFACT_TAMPERED":
     case "ACCURACY_REPORT_TAMPERED":
       return "The in-race evidence failed integrity or source validation.";
+    case "SBOM_UNAVAILABLE":
+      return "No generated software inventory is installed with this engine.";
+    case "SBOM_INVALID":
+      return "The software inventory or source lockfile integrity check failed.";
     case "RESPONSE_NOT_OK":
       return "The engine answered with an error.";
     case "RESPONSE_INVALID":

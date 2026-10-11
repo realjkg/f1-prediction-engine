@@ -530,3 +530,24 @@ export interface InRaceAccuracyReport {
   caveats: string[];
   reportSha256: string;
 }
+
+/** CycloneDX lockfile inventory — not a deployment attestation. */
+export interface SupplyChainComponent {
+  ecosystem: "pypi" | "npm";
+  name: string;
+  version: string;
+  scope: "required" | "optional";
+  license: string | null;
+}
+
+export interface SupplyChainView {
+  status: "lockfile-inventory-only";
+  specVersion: "1.6";
+  sbomSha256: string;
+  sourceDigests: Record<string, string>;
+  totalComponents: number;
+  ecosystemCounts: Record<string, number>;
+  components: SupplyChainComponent[];
+  limitations: string[];
+  releaseReady: false;
+}

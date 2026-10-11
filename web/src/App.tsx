@@ -8,6 +8,7 @@ import { ObservabilityPage } from "./routes/ObservabilityPage";
 import { RacePage } from "./routes/RacePage";
 import { LiveLabPage } from "./routes/LiveLabPage";
 import { SettingsPage } from "./routes/SettingsPage";
+import { SupplyChainPage } from "./routes/SupplyChainPage";
 import { engineClient, ApiError } from "./lib/api";
 import {
   ConfigProvider,
@@ -190,6 +191,7 @@ function Shell() {
         {route === "evidence" && <EvidencePage onView={countEvidenceView} />}
         {route === "brief" && <BriefPage />}
         {route === "observability" && <ObservabilityPage />}
+        {route === "supply-chain" && <SupplyChainPage />}
         {route === "settings" && (
           <SettingsPage
             record={record}

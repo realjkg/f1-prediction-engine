@@ -62,7 +62,7 @@ export function SettingsPage({ record, onProfileName, onFreshEyes, onReset }: Se
       <section aria-label="Pit wall profile" className="settings-profile">
         <h2>Pit wall</h2>
         <label className="settings-field">
-          Name
+          Nickname (do not use your real name)
           <input
             type="text"
             value={record.profileName}
@@ -74,6 +74,7 @@ export function SettingsPage({ record, onProfileName, onFreshEyes, onReset }: Se
           <input type="checkbox" checked={record.freshEyes} onChange={(event) => onFreshEyes(event.target.checked)} />
           Fresh Eyes — hide rounds you have already played
         </label>
+        <p className="settings-note">For ages 8 and up: racing analysis and fictional points only. No bets, money, ads, chat, public profiles, or prizes. Your nickname and preferences are stored locally on this device; avoid personal details.</p>
         <p className="settings-note">
           Fresh Eyes keeps your record intact; it only filters the race picker, so a second viewer calls played rounds
           without hindsight.

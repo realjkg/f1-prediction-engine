@@ -6,6 +6,11 @@ COPY engine/requirements.lock.txt /app/engine/requirements.lock.txt
 RUN python -m pip install --no-cache-dir --require-hashes -r engine/requirements.lock.txt
 COPY engine/f1engine /app/engine/f1engine
 COPY scripts /app/scripts
+COPY engine/requirements-dev.lock.txt /app/engine/requirements-dev.lock.txt
+COPY web/package-lock.json /app/web/package-lock.json
+# Generate a reproducible partial CycloneDX inventory *inside* the runtime
+# image. This covers pinned Python + npm dependencies, not OS/native binaries.
+RUN python scripts/generate-sbom.py --root /app --output /app/data/sbom/f1-sbom.cdx.json
 COPY data/snapshot /app/data/snapshot
 COPY deploy/engine-entrypoint.sh /app/deploy/engine-entrypoint.sh
 RUN mkdir -p /app/data/evidence /artifacts && \
