@@ -307,7 +307,7 @@ def write_forward_report(path: Path, report: ForwardReport) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with path.open("x", encoding="utf-8") as stream:
-            stream.write(json.dumps(document, sort_keys=True, indent=2, allow_nan=False) + "\\n")
+            stream.write(json.dumps(document, sort_keys=True, indent=2, allow_nan=False) + "\n")
     except FileExistsError:
         if read_forward_report(path) != document:
             raise ValueError("existing research report differs; refusing overwrite") from None

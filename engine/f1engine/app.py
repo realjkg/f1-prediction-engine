@@ -65,13 +65,13 @@ from f1engine.evidence import (
     verify_chain,
 )
 from f1engine.ingestion import PinnedDataset, load_snapshot
-from f1engine.inrace_walkforward import read_forward_report
 from f1engine.inrace_pipeline import (
     ArtifactTampered,
     InRaceRunArtifact,
     read_fusion_artifacts,
     read_run_artifact,
 )
+from f1engine.inrace_walkforward import read_forward_report
 from f1engine.lap_trace import LapTraceError, LapTraceRecord, get_lap_observation
 from f1engine.live_prior import UpdatedScenario
 from f1engine.observability import EventStatus, Signal
