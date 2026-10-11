@@ -6,6 +6,7 @@ import { EvidencePage } from "./routes/EvidencePage";
 import { ModelsPage } from "./routes/ModelsPage";
 import { ObservabilityPage } from "./routes/ObservabilityPage";
 import { RacePage } from "./routes/RacePage";
+import { LiveLabPage } from "./routes/LiveLabPage";
 import { SettingsPage } from "./routes/SettingsPage";
 import { engineClient, ApiError } from "./lib/api";
 import {
@@ -184,6 +185,7 @@ function Shell() {
       </header>
       <main className="app-main">
         {route === "race" && <RacePage record={record} onLock={lockCall} onOpenEvidence={openEvidence} />}
+        {route === "live-lab" && <LiveLabPage />}
         {route === "models" && <ModelsPage record={record} />}
         {route === "evidence" && <EvidencePage onView={countEvidenceView} />}
         {route === "brief" && <BriefPage />}
