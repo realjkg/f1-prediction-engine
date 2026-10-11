@@ -12,5 +12,19 @@ python scripts/demo.py \
   --season "${F1E_DEMO_SEASON:-2024}" \
   --no-serve --no-brief
 
+# Secure production transport: TLS 1.3-only OpenSSL context + mutual
+# certificate validation for the Nginx-to-engine channel. No fallback.
+if [ "${F1E_REQUIRE_TLS:-0}" = "1" ]; then
+  for file in /run/tls/engine.crt /run/tls/engine.key /run/tls/ca.crt; do
+    if [ ! -r "$file" ]; then
+      echo "TLS 1.3 production startup refused: required certificate unavailable" >&2
+      exit 1
+    fi
+  done
+  exec python scripts/serve-tls13.py
+fi
+
+# Explicitly local/demo-only plaintext mode: secure Compose always sets
+# F1E_REQUIRE_TLS=1 and is the only permitted production deployment.
 exec python -m uvicorn f1engine.app:create_app \
   --factory --host 0.0.0.0 --port 8000 --workers 1
