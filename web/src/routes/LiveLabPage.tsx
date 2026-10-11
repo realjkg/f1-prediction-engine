@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { EngineErrorPanel, Loading } from "../components/EngineError";
 import { useEngineClient, useResource } from "../lib/engine";
 import type { InRaceRunArtifact } from "../types";
@@ -29,7 +29,7 @@ export function LiveLabPage() {
     [query.raceId, query.season, query.lap, tick],
   );
 
-  const run = (event: React.FormEvent<HTMLFormElement>) => {
+  const run = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const raceId = raceInput.trim().toLowerCase();
     const season = Number(seasonInput);
