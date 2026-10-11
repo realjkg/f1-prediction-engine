@@ -190,4 +190,4 @@ def test_import_cli_requires_exact_retained_provider_bytes(tmp_path: Path) -> No
         capture_output=True, text=True,
     )
     assert failed.returncode != 0
-    assert "hash" in failed.stderr.lower()
+    assert "do not match claimed sourcepayloadsha256" in failed.stderr.lower()
