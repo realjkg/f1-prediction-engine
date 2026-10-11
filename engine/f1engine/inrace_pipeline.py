@@ -132,8 +132,12 @@ def build_run_artifact(record: LapTraceRecord, *, trials: int = 2000) -> InRaceR
         "modelReady": False,
         "advisoryOnly": True,
     }
-    fields["artifactSha256"] = artifact_digest(fields)
-    return InRaceRunArtifact.model_validate(fields)
+    # Hash the *validated wire representation*, including normalized UTC
+    # timestamps. Hashing an unvalidated ISO string would cause a false
+    # mismatch when Pydantic serializes +00:00 as Z.
+    fields["artifactSha256"] = "0" * 64
+    draft = InRaceRunArtifact.model_validate(fields)
+    return draft.model_copy(update={"artifact_sha256": artifact_digest(draft)})
 
 
 def write_run_artifact(root: Path, artifact: InRaceRunArtifact) -> Path:
