@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from pathlib import Path
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from f1engine.app import ApiSettings, create_app
-
 from f1engine.inrace_evaluation import FrozenEvaluationCase
 from f1engine.inrace_walkforward import (
     evaluate_forward_weights,
