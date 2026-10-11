@@ -29,6 +29,8 @@ function errorHeadline(error: ApiError): string {
     case "EVIDENCE_SCHEMA_INVALID":
     case "EVIDENCE_RECORD_INVALID":
       return "The evidence ledger refused to serve records — the chain did not verify.";
+    case "ACCURACY_REPORT_UNAVAILABLE":
+      return "No verified chronological in-race accuracy report is configured.";
     case "LAP_TRACE_UNAVAILABLE":
     case "LIVE_SCENARIO_UNAVAILABLE":
       return "No authorized in-race evidence source is configured.";
@@ -39,6 +41,7 @@ function errorHeadline(error: ApiError): string {
     case "LAP_TRACE_INVALID":
     case "LAP_TRACE_TAMPERED":
     case "ARTIFACT_TAMPERED":
+    case "ACCURACY_REPORT_TAMPERED":
       return "The in-race evidence failed integrity or source validation.";
     case "RESPONSE_NOT_OK":
       return "The engine answered with an error.";
