@@ -7,6 +7,9 @@ import type { SupplyChainComponent, SupplyChainView } from "../types";
 export function SupplyChainPage() {
   const client = useEngineClient();
   const view = useResource(() => client.getSupplyChain(), []);
+  // A valid research accuracy report is evidence of a completed evaluation,
+  // not evidence that the in-race forecast is calibrated or releasable.
+  const accuracy = useResource(() => client.getInraceAccuracy(), []);
   const [term, setTerm] = useState("");
   const [ecosystem, setEcosystem] = useState<"all" | "pypi" | "npm">("all");
 
@@ -39,7 +42,10 @@ export function SupplyChainPage() {
           onEcosystem={setEcosystem}
         />
       )}
-      <ReleaseChecklist />
+      <ReleaseChecklist
+        inventoryVerified={view.status === "ready"}
+        accuracyEvidencePresent={accuracy.status === "ready"}
+      />
     </section>
   );
 }
@@ -123,28 +129,68 @@ function InventoryDetails({
   );
 }
 
-const GATES = [
-  { name: "Dependency inventory", state: "In progress",
-    detail: "Python/npm CycloneDX generator and CI artifact. Full deployed binary SBOM still required." },
-  { name: "Code and supply-chain tests", state: "Must pass",
-    detail: "Python, web, CodeQL, image tests, audits and mobile builds for the release SHA." },
-  { name: "Secure communications", state: "Needs verification",
-    detail: "TLS 1.3 configuration is coded; verify real ingress and MQTT handshakes." },
-  { name: "Race-state accuracy", state: "Needs verification",
-    detail: "Blind chronological calibration and licensed live-source coverage are not complete." },
-  { name: "Age-appropriate experience", state: "Needs review",
-    detail: "8+ informational use, no betting, ads, chat, real-money prizes or public profiles; complete privacy and store reviews." },
-  { name: "Release provenance", state: "Not qualified",
-    detail: "Image/mobile SBOMs, signature, provenance, rollback, observability and artifact retention must be attested." },
-] as const;
+interface Gate {
+  name: string;
+  state: string;
+  detail: string;
+}
 
-function ReleaseChecklist() {
+function releaseGates(inventoryVerified: boolean, accuracyEvidencePresent: boolean): Gate[] {
+  return [
+    {
+      name: "Runtime dependency inventory",
+      state: inventoryVerified ? "Verified — partial SBOM" : "Unavailable",
+      detail: inventoryVerified
+        ? "The running engine serves a SHA-256-checked CycloneDX 1.6 inventory tied to its three lockfiles. Container OS and native mobile binaries are not covered."
+        : "The engine has not supplied a verifiable CycloneDX artifact. Check container build, source lockfiles, or integrity manifest.",
+    },
+    {
+      name: "Build and security checks",
+      state: "Requires release-SHA CI evidence",
+      detail: "Verify Python, web, dependency audit, CodeQL, TLS 1.3 container, mobile build and image checks against the same release commit. The UI does not have a signed CI attestation.",
+    },
+    {
+      name: "TLS 1.3 end-to-end",
+      state: "External endpoint verification required",
+      detail: "Secure Docker ingress and backend mutual TLS have smoke tests. Real public deployment certificates, MQTT broker handshake and monitoring must be verified independently.",
+    },
+    {
+      name: "Chronological race prediction accuracy",
+      state: accuracyEvidencePresent ? "Research report available — not qualified" : "No verified evaluation report",
+      detail: accuracyEvidencePresent
+        ? "The server can supply a hash-verified research evaluation, but independent live-source coverage, calibration, and prospective improvement over the current-leader baseline are still required."
+        : "There is no configured verified forward evaluation report. No live race-winner accuracy or calibrated probabilities may be claimed.",
+    },
+    {
+      name: "Source and data rights",
+      state: "External approval required",
+      detail: "Document commercial and redistribution rights for licensed OpenF1 MQTT streams and historical race outcomes. Keep provider access tokens backend-only.",
+    },
+    {
+      name: "Release identity and rollback",
+      state: "Blocked",
+      detail: "Produce container and native package SBOMs, bind them to signed image/app digests, attest deployment configuration, verify recovery, rollback, privacy and store-review evidence.",
+    },
+  ];
+}
+
+function ReleaseChecklist({
+  inventoryVerified,
+  accuracyEvidencePresent,
+}: {
+  inventoryVerified: boolean;
+  accuracyEvidencePresent: boolean;
+}) {
+  const gates = releaseGates(inventoryVerified, accuracyEvidencePresent);
   return (
     <section className="supply-release" aria-label="Release capability checklist">
-      <h2>Release 1.0 capability gates</h2>
-      <p className="screen-intro">Tracked engineering requirements. These are not automatically verified deployment statuses.</p>
+      <h2>Release capability gates</h2>
+      <p className="advisory-banner is-warning" role="status">
+        Production live prediction: NOT QUALIFIED. The statuses distinguish
+        verified runtime evidence from external approvals and missing artifacts.
+      </p>
       <ul>
-        {GATES.map((gate) => (
+        {gates.map((gate) => (
           <li key={gate.name}>
             <strong>{gate.name}</strong>
             <span className="supply-gate-state">{gate.state}</span>

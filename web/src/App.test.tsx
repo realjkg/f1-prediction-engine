@@ -45,6 +45,53 @@ describe("App shell (engine-backed)", () => {
     expect(await screen.findByText(/no simulation to show/i)).toBeTruthy();
   });
 
+  it("refuses to declare live release ready when supply chain and accuracy evidence are missing", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { name: "Pick a round" });
+    fireEvent.click(screen.getByRole("button", { name: "Inventory" }));
+    expect(await screen.findByRole("heading", { name: "Software inventory & release checks" })).toBeTruthy();
+    expect(await screen.findByText(/The inventory is unavailable until its generated artifact/)).toBeTruthy();
+    expect(screen.getByText(/Production live prediction: NOT QUALIFIED/)).toBeTruthy();
+    expect(screen.getByText("No verified evaluation report")).toBeTruthy();
+    expect(screen.getByText("Unavailable", { selector: ".supply-gate-state" })).toBeTruthy();
+  });
+
+  it("shows verified partial dependency evidence without claiming a production release", async () => {
+    const previousFetch = globalThis.fetch;
+    const inventory = {
+      status: "lockfile-inventory-only", specVersion: "1.6",
+      sbomSha256: "a".repeat(64),
+      sourceDigests: { "web/package-lock.json": "b".repeat(64) },
+      totalComponents: 2, ecosystemCounts: { pypi: 1, npm: 1 },
+      releaseReady: false, limitations: ["Container OS and native libraries excluded"],
+      components: [
+        { ecosystem: "pypi", name: "fastapi", version: "0.143.0", scope: "required", license: null },
+        { ecosystem: "npm", name: "react", version: "19.3.0", scope: "required", license: "MIT" },
+      ],
+    };
+    const fetchWithInventory = ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (new URL(String(input), "http://test").pathname === "/api/supply-chain") {
+        return Promise.resolve(new Response(JSON.stringify(inventory), { status: 200 }));
+      }
+      return previousFetch(input, init);
+    }) as typeof fetch;
+    globalThis.fetch = fetchWithInventory;
+    (window as unknown as { fetch: typeof fetch }).fetch = fetchWithInventory;
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "Pick a round" });
+    fireEvent.click(screen.getByRole("button", { name: "Inventory" }));
+    expect(await screen.findByText("Verified — partial SBOM")).toBeTruthy();
+    expect(screen.getByText(/Production live prediction: NOT QUALIFIED/)).toBeTruthy();
+    expect(screen.getByText("fastapi")).toBeTruthy();
+    expect(screen.getByText("react")).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Find a package" }), {
+      target: { value: "fastapi" },
+    });
+    expect(screen.getByText("Showing 1 of 2 packages.")).toBeTruthy();
+  });
+
   it("carries the advisory evidence-basis banner from the served config", async () => {
     render(<App />);
     // briefMode "fixture" — the banner is the fixture variant, never hardcoded.
