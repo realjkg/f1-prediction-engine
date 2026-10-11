@@ -124,10 +124,12 @@ def _rows(
                     unkeyed.append((when, item))
                     continue
                 old = revisions.get(key)
+                sequence = item.get("_id")
+                prior_sequence = old[1].get("_id") if old else None
                 if old is None or (
-                    when, int(item.get("_id", -1))
+                    when, sequence if type(sequence) is int else -1
                 ) >= (
-                    old[0], int(old[1].get("_id", -1))
+                    old[0], prior_sequence if type(prior_sequence) is int else -1
                 ):
                     revisions[key] = (when, item)
             items = unkeyed + list(revisions.values())
