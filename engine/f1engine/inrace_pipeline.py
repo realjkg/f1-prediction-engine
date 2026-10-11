@@ -40,6 +40,7 @@ class InRaceRunArtifact(WireModel):
     schema_version: Literal[1] = 1
     checkpoint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_type: Literal["historical-archive", "licensed-live", "synthetic-fixture"]
     season: int
     race_id: str
     lap: int
@@ -119,6 +120,7 @@ def build_run_artifact(record: LapTraceRecord, *, trials: int = 2000) -> InRaceR
         "schemaVersion": 1,
         "checkpointSha256": record.record_sha256,
         "sourceSha256": checkpoint.source_payload_sha256,
+        "sourceType": checkpoint.source_type,
         "season": checkpoint.season,
         "raceId": checkpoint.race_id,
         "lap": checkpoint.lap,
