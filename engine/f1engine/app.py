@@ -71,8 +71,8 @@ from f1engine.inrace_pipeline import (
     read_fusion_artifacts,
     read_run_artifact,
 )
-from f1engine.live_prior import UpdatedScenario
 from f1engine.lap_trace import LapTraceError, LapTraceRecord, get_lap_observation
+from f1engine.live_prior import UpdatedScenario
 from f1engine.observability import EventStatus, Signal
 from f1engine.scoring import CallScore, PitCall, score_call_sheet
 from f1engine.wire import WireModel
