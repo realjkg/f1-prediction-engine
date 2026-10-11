@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import App from "./App";
 import { installMockEngine, type MockEngine } from "./test/mockEngine";
 
-const TAB_LABELS = ["Race", "Live Lab", "Models", "Evidence", "Brief", "Observability", "Settings"];
+const TAB_LABELS = ["Race", "Live Lab", "Models", "Evidence", "Brief", "Observability", "Inventory", "Settings"];
 
 describe("App shell (engine-backed)", () => {
   let engine: MockEngine;
@@ -19,7 +19,7 @@ describe("App shell (engine-backed)", () => {
     engine = installMockEngine();
   });
 
-  it("renders the seven-tab bottom navigation with the round picker as the default route", async () => {
+  it("renders the eight-tab bottom navigation with the round picker as the default route", async () => {
     render(<App />);
     const tabs = await waitFor(() => within(screen.getByRole("navigation")).getAllByRole("button"));
     expect(tabs.map((tab) => tab.textContent)).toEqual(TAB_LABELS);
