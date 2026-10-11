@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { EngineErrorPanel, Loading } from "../components/EngineError";
 import { useEngineClient, useResource } from "../lib/engine";
-import type { InRaceRunArtifact, UpdatedScenario } from "../types";
+import type { InRaceAccuracyReport, InRaceRunArtifact, UpdatedScenario } from "../types";
 
 const formatNumber = (value: number) => value.toFixed(1);
 
@@ -33,6 +33,8 @@ export function LiveLabPage() {
     () => client.getLapFusion(query.raceId, query.season, query.lap),
     [query.raceId, query.season, query.lap, tick],
   );
+
+  const accuracy = useResource(() => client.getInraceAccuracy(), [tick]);
 
   const run = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -113,7 +115,74 @@ export function LiveLabPage() {
           )}
         </section>
       )}
+      <section className="live-fusion" aria-label="Chronological model accuracy">
+        <h2>Model accuracy qualification</h2>
+        {accuracy.status === "loading" && <Loading label="research accuracy evidence" />}
+        {accuracy.status === "error" && (
+          accuracy.error.code === "ACCURACY_REPORT_UNAVAILABLE" ? (
+            <p className="empty-state" role="status">
+              No verified forward-only accuracy report is configured. The app will
+              not claim that its current-lap predictions outperform the baseline.
+            </p>
+          ) : (
+            <EngineErrorPanel
+              error={accuracy.error}
+              onRetry={accuracy.retry}
+              context="Chronological winner accuracy"
+            />
+          )
+        )}
+        {accuracy.status === "ready" && <AccuracyEvidence report={accuracy.data} />}
+      </section>
     </section>
+  );
+}
+
+function AccuracyEvidence({ report }: { report: InRaceAccuracyReport }) {
+  if (!report.researchOnly || report.modelPromotionAllowed) {
+    return <p className="advisory-banner is-warning">
+      Invalid qualification status. Accuracy evidence cannot be displayed.
+    </p>;
+  }
+  const labels: Array<[string, string]> = [
+    ["pre-race", "Frozen pre-race model"],
+    ["running-order", "Leader at checkpoint"],
+    ["green-continuation", "Green-flag pace"],
+    ["walkforward-fusion", "Forward-selected combination"],
+  ];
+  return (
+    <div aria-label="Research accuracy comparison">
+      <p className="screen-intro">
+        {report.scoredRaces} later completed races scored; {report.unscoredRaces}
+        {" "}races lacked enough earlier training results.
+        One checkpoint per race. No weights selected using the target race outcome.
+      </p>
+      <div className="advisory-banner is-warning">
+        Research diagnostic only. Winner hit rate and proper scores do not
+        establish prospective accuracy, calibration, or production readiness.
+      </div>
+      <table className="standings-table">
+        <thead><tr><th scope="col">Method</th><th scope="col">Winner hit</th>
+          <th scope="col">Brier ↓</th><th scope="col">Log loss ↓</th></tr></thead>
+        <tbody>
+          {labels.map(([key, name]) => {
+            const value = report.pairedSummary[key];
+            return value ? (
+              <tr key={key}>
+                <th scope="row">{name}</th>
+                <td>{(value.winnerHitRate * 100).toFixed(1)}%</td>
+                <td>{value.meanMulticlassBrier.toFixed(3)}</td>
+                <td>{value.meanWinnerLogLoss.toFixed(3)}</td>
+              </tr>
+            ) : null;
+          })}
+        </tbody>
+      </table>
+      <p className="screen-intro">
+        Evaluation artifact <code>{report.reportSha256.slice(0, 20)}…</code>.
+        No model has been automatically promoted.
+      </p>
+    </div>
   );
 }
 

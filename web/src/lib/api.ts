@@ -29,6 +29,7 @@ import type {
   RacesView,
   InRaceRunArtifact,
   UpdatedScenario,
+  InRaceAccuracyReport,
 } from "../types";
 
 /**
@@ -56,6 +57,8 @@ export type EngineErrorCode =
   | "LIVE_SCENARIO_UNAVAILABLE"
   | "SCENARIO_NOT_FOUND"
   | "PRIOR_FUSION_NOT_FOUND"
+  | "ACCURACY_REPORT_UNAVAILABLE"
+  | "ACCURACY_REPORT_TAMPERED"
   // client (this module)
   | "ENGINE_UNREACHABLE"
   | "RESPONSE_INVALID"
@@ -145,6 +148,8 @@ const ERROR_CODES = new Set<EngineErrorCode>([
   "LIVE_SCENARIO_UNAVAILABLE",
   "SCENARIO_NOT_FOUND",
   "PRIOR_FUSION_NOT_FOUND",
+  "ACCURACY_REPORT_UNAVAILABLE",
+  "ACCURACY_REPORT_TAMPERED",
   "ENGINE_UNREACHABLE",
   "RESPONSE_INVALID",
   "RESPONSE_NOT_OK",
@@ -165,6 +170,7 @@ export interface EngineClient {
   getRaceResult(raceId: string, season: number): Promise<RaceResultView>;
   getLapScenario(raceId: string, season: number, lap?: number): Promise<InRaceRunArtifact>;
   getLapFusion(raceId: string, season: number, lap?: number): Promise<UpdatedScenario>;
+  getInraceAccuracy(): Promise<InRaceAccuracyReport>;
   /**
    * The engine-computed round score — consensus flag from the ledger
    * server-side, streak_before from the pit-wall record. The client never
@@ -258,6 +264,10 @@ export function createEngineClient(
           (lap === undefined ? "" : `&lap=${lap}`),
         ["status", "checkpointSha256", "sourcePriorSha256", "candidates", "promoted"],
       ),
+    getInraceAccuracy: () =>
+      getJson<InRaceAccuracyReport>("/api/inrace/accuracy", [
+        "revision", "researchOnly", "modelPromotionAllowed", "pairedSummary", "reportSha256",
+      ]),
     getRaceResult: (raceId, season) =>
       getJson<RaceResultView>(
         `/api/races/${encodeURIComponent(raceId)}/result?${seasonQuery(season)}`,
