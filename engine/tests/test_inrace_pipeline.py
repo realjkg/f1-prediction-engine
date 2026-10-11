@@ -8,8 +8,12 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from fastapi.testclient import TestClient
 
+from f1engine.app import ApiSettings, create_app
 from f1engine.inrace_pipeline import (
+    read_fusion_artifacts,
+    write_fusion_artifacts,
     ArtifactTampered,
     build_run_artifact,
     project_and_record,
@@ -189,3 +193,42 @@ def test_cutoff_rejects_future_or_incomplete_source(tmp_path: Path):
             entrant_numbers=(1, 16), source_type="synthetic-fixture",
             rights_evidence=None,
         )
+
+
+def test_api_joins_only_verifiable_prior_and_lap_artifacts(
+    predictable_dataset, tmp_path: Path,
+) -> None:
+    record, artifact = replay(tmp_path)
+    settings = ApiSettings(
+        lap_trace_path=tmp_path / "trace.jsonl",
+        inrace_artifact_dir=tmp_path / "artifacts",
+    )
+    client = TestClient(create_app(settings, dataset=predictable_dataset))
+    scenario = client.get("/api/races/singapore/lap-scenario?season=2026&lap=5")
+    assert scenario.status_code == 200
+    assert scenario.json()["checkpointSha256"] == record.record_sha256
+    assert scenario.json()["modelReady"] is False
+    assert scenario.json()["sourceType"] == "synthetic-fixture"
+    missing = client.get("/api/races/singapore/lap-fusion?season=2026&lap=5")
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "PRIOR_FUSION_NOT_FOUND"
+
+    saved = write_fusion_artifacts(
+        tmp_path/"artifacts", record, artifact, prior(), scenario_weight=.3
+    )
+    assert saved == read_fusion_artifacts(tmp_path/"artifacts", record, artifact)
+    result = client.get("/api/races/singapore/lap-fusion?season=2026&lap=5")
+    assert result.status_code == 200
+    assert result.json()["outputSha256"] == saved.output_sha256
+    assert result.json()["promoted"] is False
+    assert sum(x["blendedResearchWeight"] for x in result.json()["candidates"]) == pytest.approx(1)
+
+    filename = tmp_path/"artifacts"/"2026-singapore"/"lap-005"/(
+        record.record_sha256 + ".prior.json"
+    )
+    tampered = json.loads(filename.read_text(encoding="utf-8"))
+    tampered["driverWinProbabilities"]["1"] = .85
+    filename.write_text(json.dumps(tampered), encoding="utf-8")
+    refused = client.get("/api/races/singapore/lap-fusion?season=2026&lap=5")
+    assert refused.status_code == 503
+    assert refused.json()["detail"]["code"] == "ARTIFACT_TAMPERED"
