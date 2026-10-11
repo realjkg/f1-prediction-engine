@@ -21,12 +21,7 @@ if [ "${F1E_REQUIRE_TLS:-0}" = "1" ]; then
       exit 1
     fi
   done
-  exec python -m uvicorn f1engine.app:create_app \
-    --factory --host 0.0.0.0 --port 8000 --workers 1 \
-    --ssl-certfile /run/tls/engine.crt \
-    --ssl-keyfile /run/tls/engine.key \
-    --ssl-ca-certs /run/tls/ca.crt \
-    --ssl-cert-reqs 2
+  exec python scripts/serve-tls13.py
 fi
 
 # Explicitly local/demo-only plaintext mode: secure Compose always sets
