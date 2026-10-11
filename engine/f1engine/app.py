@@ -65,6 +65,7 @@ from f1engine.evidence import (
     verify_chain,
 )
 from f1engine.ingestion import PinnedDataset, load_snapshot
+from f1engine.inrace_walkforward import read_forward_report
 from f1engine.inrace_pipeline import (
     ArtifactTampered,
     InRaceRunArtifact,
@@ -108,6 +109,7 @@ class ApiSettings:
     ledger_path: Path = Path(DEFAULT_LEDGER_PATH)
     lap_trace_path: Path | None = None
     inrace_artifact_dir: Path | None = None
+    inrace_accuracy_report: Path | None = None
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
     brief_mode: Literal["fixture", "live"] = "fixture"
 
@@ -128,6 +130,8 @@ class ApiSettings:
             if environ.get("F1E_LAP_TRACE_PATH") else None,
             inrace_artifact_dir=Path(environ["F1E_INRACE_ARTIFACT_DIR"])
             if environ.get("F1E_INRACE_ARTIFACT_DIR") else None,
+            inrace_accuracy_report=Path(environ["F1E_INRACE_ACCURACY_REPORT"])
+            if environ.get("F1E_INRACE_ACCURACY_REPORT") else None,
             cors_origins=origins,
             brief_mode=_brief_mode(environ.get("F1E_BRIEF_MODE")),
         )
@@ -764,6 +768,20 @@ def create_app(
                 "No verified frozen pre-race prior for this lap",
             )
         return updated
+
+    @app.get("/api/inrace/accuracy")
+    def inrace_accuracy_report(response: Response) -> dict[str, object]:
+        """Serve only a verified immutable research score; no training on GET."""
+        response.headers["Cache-Control"] = "no-store"
+        if resolved.inrace_accuracy_report is None:
+            raise _error(
+                503, "ACCURACY_REPORT_UNAVAILABLE",
+                "No verified forward-only in-race evaluation report is configured",
+            )
+        try:
+            return read_forward_report(resolved.inrace_accuracy_report)
+        except ValueError as error:
+            raise _error(503, "ACCURACY_REPORT_TAMPERED", str(error)) from error
 
     @app.get("/api/races/{race_id}/result")
     def race_result(
