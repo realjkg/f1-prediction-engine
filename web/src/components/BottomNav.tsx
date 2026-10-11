@@ -1,4 +1,4 @@
-export const ROUTES = ["race", "live-lab", "models", "evidence", "brief", "observability", "settings"] as const;
+export const ROUTES = ["race", "live-lab", "models", "evidence", "brief", "observability", "supply-chain", "settings"] as const;
 
 export type Route = (typeof ROUTES)[number];
 
@@ -10,6 +10,7 @@ export const ROUTE_LABELS: Record<Route, string> = {
   brief: "Brief",
   observability: "Observability",
   settings: "Settings",
+  "supply-chain": "Inventory",
 };
 
 interface BottomNavProps {

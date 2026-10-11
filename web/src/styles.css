@@ -1122,3 +1122,89 @@ h3 {
   .live-lab-form { grid-template-columns: 1fr 1fr; }
   .live-lab-form label:first-child { grid-column: 1 / -1; }
 }
+
+
+/* ---- supply chain inventory and release-readiness gate ---- */
+.supply-chain { overflow-wrap: anywhere; }
+.supply-panel {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: var(--color-surface);
+}
+.supply-summary {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 0.5rem;
+  margin: 0.5rem 0 1rem;
+}
+.supply-summary > div {
+  display: flex;
+  flex-direction: column;
+  padding: 0.65rem 0.4rem;
+  background: var(--color-surface-raised);
+  border-radius: 8px;
+  align-items: center;
+}
+.supply-summary strong { font-size: 1.25rem; color: var(--color-accent); }
+.supply-summary span { font-size: 0.7rem; color: var(--color-text-muted); }
+.supply-hash { font-size: 0.76rem; }
+.supply-hash code, .supply-locks code {
+  display: block;
+  font-size: 0.67rem;
+  overflow-wrap: anywhere;
+  margin-top: 0.3rem;
+}
+.supply-controls {
+  display: grid;
+  grid-template-columns: 1fr minmax(7rem,0.4fr);
+  gap: 0.5rem;
+}
+.supply-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+.supply-controls input,.supply-controls select {
+  min-width: 0;
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  padding: 0.55rem;
+}
+.supply-table-wrap { max-height: 28rem; overflow: auto; }
+.supply-table-wrap .standings-table { font-size: 0.74rem; }
+.supply-table-wrap th, .supply-table-wrap td { text-align: left; }
+.supply-table-wrap small { display: block; color: var(--color-text-muted); font-weight: 400; }
+.supply-limitations {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  padding-left: 1.3rem;
+}
+.supply-locks { font-size: 0.76rem; }
+.supply-locks > div { margin-bottom: 0.8rem; }
+.supply-locks dt { color: var(--color-text-muted); }
+.supply-release ul { list-style: none; padding: 0; margin: 0; }
+.supply-release li {
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.supply-release li strong { font-size: 0.85rem; }
+.supply-release li p { color: var(--color-text-muted); font-size: 0.78rem; line-height: 1.5; margin: 0.4rem 0 0; }
+.supply-gate-state {
+  display: inline-block;
+  margin-left: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 99px;
+  padding: 0.12rem 0.4rem;
+  font-size: 0.68rem;
+  color: var(--color-warn);
+}
+@media (max-width: 390px) {
+  .supply-controls { grid-template-columns: 1fr; }
+}
