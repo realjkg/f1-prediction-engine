@@ -163,7 +163,7 @@ def write_run_artifact(root: Path, artifact: InRaceRunArtifact) -> Path:
             lap=artifact.lap, checkpoint_sha256=artifact.checkpoint_sha256,
         )
         if prior != artifact:
-            raise ArtifactTampered("immutable artifact identity changed")
+            raise ArtifactTampered("immutable artifact identity changed") from None
     return path
 
 
@@ -233,7 +233,7 @@ def write_fusion_artifacts(
             # Existing files must match exactly. Never overwrite frozen priors
             # or tune weights in-place to match a subsequently known result.
             if path.read_text(encoding="utf-8") != value:
-                raise ArtifactTampered("frozen prior/fusion artifact already differs")
+                raise ArtifactTampered("frozen prior/fusion artifact already differs") from None
     return combined
 
 
