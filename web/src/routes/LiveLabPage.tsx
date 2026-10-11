@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { EngineErrorPanel, Loading } from "../components/EngineError";
 import { useEngineClient, useResource } from "../lib/engine";
-import type { InRaceRunArtifact } from "../types";
+import type { InRaceRunArtifact, UpdatedScenario } from "../types";
 
 const formatNumber = (value: number) => value.toFixed(1);
 
@@ -26,6 +26,11 @@ export function LiveLabPage() {
 
   const result = useResource(
     () => client.getLapScenario(query.raceId, query.season, query.lap),
+    [query.raceId, query.season, query.lap, tick],
+  );
+
+  const fusion = useResource(
+    () => client.getLapFusion(query.raceId, query.season, query.lap),
     [query.raceId, query.season, query.lap, tick],
   );
 
@@ -85,6 +90,29 @@ export function LiveLabPage() {
         </div>
       ) : null}
       {result.status === "ready" ? <ScenarioDetails artifact={result.data} /> : null}
+      {result.status === "ready" && result.data.scenario !== null && (
+        <section aria-label="Pre-race and current-lap comparison">
+          {fusion.status === "ready" ? (
+            fusion.data.checkpointSha256 === result.data.checkpointSha256 ? (
+              <PriorComparison fusion={fusion.data} />
+            ) : (
+              <p className="advisory-banner is-warning">
+                Frozen model source does not match this lap. Comparison withheld.
+              </p>
+            )
+          ) : fusion.status === "loading" ? (
+            <p className="screen-intro">Checking for a matching frozen pre-race model…</p>
+          ) : fusion.error.code === "PRIOR_FUSION_NOT_FOUND" ? (
+            <p className="empty-state">
+              No matching, frozen pre-race model artifact was recorded for this checkpoint.
+              Showing the lap-only scenario, without implying a combined prediction.
+            </p>
+          ) : (
+            <EngineErrorPanel error={fusion.error} onRetry={fusion.retry}
+              context="Frozen pre-race model comparison" />
+          )}
+        </section>
+      )}
     </section>
   );
 }
@@ -146,5 +174,46 @@ function ScenarioDetails({ artifact }: { artifact: InRaceRunArtifact }) {
         This is read-only evidence, not a live production prediction.
       </p>
     </div>
+  );
+}
+
+
+function PriorComparison({ fusion }: { fusion: UpdatedScenario }) {
+  return (
+    <section aria-label="Research model comparison" className="live-fusion">
+      <h2>Pre-race model + latest recorded lap</h2>
+      <p className="advisory-banner is-warning">
+        Experimental blend, not a qualified winner forecast. Coefficients have not
+        passed chronological out-of-sample calibration. No promotion.
+      </p>
+      <p className="screen-intro">
+        Model revision: <code>{fusion.modelRevision}</code>.
+        Prior frozen: {new Date(fusion.priorFrozenAt).toLocaleString()}.
+        Prior weight {(fusion.priorWeight * 100).toFixed(0)}%;
+        lap scenario weight {(fusion.greenScenarioWeight * 100).toFixed(0)}%.
+      </p>
+      <table className="standings-table">
+        <thead>
+          <tr><th scope="col">Driver #</th><th scope="col">Pre-race</th>
+            <th scope="col">Current lap</th><th scope="col">Combined research</th></tr>
+        </thead>
+        <tbody>
+          {[...fusion.candidates].sort(
+            (a,b) => b.blendedResearchWeight - a.blendedResearchWeight
+          ).map((c) => (
+            <tr key={c.driverNumber}>
+              <th scope="row">#{c.driverNumber}</th>
+              <td>{(100 * c.preRaceProbability).toFixed(1)}%</td>
+              <td>{(100 * c.greenContinuationFrequency).toFixed(1)}%</td>
+              <td>{(100 * c.blendedResearchWeight).toFixed(1)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="screen-intro">
+        Pre-race dataset <code>{fusion.sourceDatasetSha256.slice(0,16)}…</code>.
+        Fusion SHA-256 <code>{fusion.outputSha256.slice(0,16)}…</code>.
+      </p>
+    </section>
   );
 }
