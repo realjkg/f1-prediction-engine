@@ -55,9 +55,9 @@ export function GameHub({ record, races, onStart, onViewStandings }: GameHubProp
           <p>Complete three rounds, build a streak and climb the model standings. Points are for fun and never represent a financial stake.</p>
         </div>
         {next ? (
-          <button type="button" className="primary-button game-hub__play" onClick={() => onStart(next)}>
+          <button type="button" className="primary-button game-hub__play" onClick={() => onStart(next)} aria-label="START CHALLENGE" aria-describedby="game-hub-next-race">
             START CHALLENGE <span aria-hidden="true">→</span>
-            <small>{next.season} · {next.name}</small>
+            <small id="game-hub-next-race">{next.season} · {next.name}</small>
           </button>
         ) : (
           <div className="game-hub__complete" role="status">All completed rounds in this catalog have been played. Browse completed challenges below or review your standings.</div>
