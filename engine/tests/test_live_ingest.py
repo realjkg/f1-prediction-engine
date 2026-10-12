@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import ssl
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -231,11 +232,15 @@ def test_token_exchange_parses_the_documented_response(monkeypatch: pytest.Monke
 
     def fake_urlopen(request, timeout, context):
         seen["url"], seen["data"] = request.full_url, request.data
+        seen["tls"] = context
         return Reply(b'{"access_token":"tok","expires_in":"3600","token_type":"bearer"}')
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     assert fetch_access_token("me@example.com", "pw") == ("tok", 3600)
     assert seen["url"] == TOKEN_URL and TOKEN_URL.startswith("https://")
+    assert seen["tls"].minimum_version == ssl.TLSVersion.TLSv1_3
+    assert seen["tls"].verify_mode == ssl.CERT_REQUIRED
+    assert seen["tls"].check_hostname is True
     assert b"username=me%40example.com" in seen["data"]
     monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: Reply(b"{}"))
     with pytest.raises(ValueError, match="malformed"):
