@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -95,16 +96,24 @@ def test_startup_refuses_missing_web_evidence_and_unverifiable_sbom(
             ),
             static_dir=site,
         )
+    altered_root = tmp_path / "modified"
+    for rel in (
+        "engine/requirements.lock.txt", "engine/requirements-dev.lock.txt",
+        "web/package-lock.json",
+    ):
+        dest = altered_root / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / rel, dest)
+    (altered_root / "engine/requirements.lock.txt").write_text(
+        "changed", encoding="utf-8",
+    )
     with pytest.raises(Exception, match="source lock changed"):
-        altered = tmp_path / "modified" / "engine"
-        altered.mkdir(parents=True)
-        (altered / "requirements.lock.txt").write_text("changed", encoding="utf-8")
         create_unified_demo(
             settings=ApiSettings(
                 data_dir=predictable_snapshot,
                 ledger_path=ledger,
                 sbom_path=built_inventory,
-                sbom_source_root=tmp_path / "modified",
+                sbom_source_root=altered_root,
             ),
             static_dir=site,
         )
