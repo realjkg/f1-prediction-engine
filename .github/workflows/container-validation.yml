@@ -1,6 +1,8 @@
 name: Container Integration Smoke
 
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - "compose.yaml"
@@ -52,6 +54,37 @@ jobs:
           if curl -fsS http://127.0.0.1:8080/metrics; then
             echo "Metrics were unexpectedly public"; exit 1
           fi
+      - name: Inventory installed OS packages in final runtime images
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/runtime-os
+          ENGINE_ID="$(docker inspect -f '{{.Image}}' "$(docker compose ps -q engine)")"
+          WEB_ID="$(docker inspect -f '{{.Image}}' "$(docker compose ps -q web)")"
+          test -n "$ENGINE_ID" && test -n "$WEB_ID"
+          # Query installed package databases in the FINAL images, not the host
+          # or multi-stage build dependencies. No package downloads/network.
+          docker run --rm --network none --read-only --entrypoint dpkg-query "$ENGINE_ID" \
+            -W '-f=${Package}\t${Version}\n' > artifacts/runtime-os/engine-dpkg.tsv
+          docker run --rm --network none --read-only --entrypoint apk "$WEB_ID" \
+            info -v > artifacts/runtime-os/web-apk.txt
+          python3 scripts/generate-runtime-os-sbom.py \
+            --engine-dump artifacts/runtime-os/engine-dpkg.tsv \
+            --web-dump artifacts/runtime-os/web-apk.txt \
+            --engine-image-id "$ENGINE_ID" --web-image-id "$WEB_ID" \
+            --source-commit "$GITHUB_SHA" \
+            --output artifacts/runtime-os/f1-container-os.cdx.json
+          python3 scripts/generate-runtime-os-sbom.py --verify \
+            --engine-dump artifacts/runtime-os/engine-dpkg.tsv \
+            --web-dump artifacts/runtime-os/web-apk.txt \
+            --output artifacts/runtime-os/f1-container-os.cdx.json
+      - name: Upload final-image OS inventory and build identity
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: f1-final-container-os-sbom
+          path: artifacts/runtime-os/
+          retention-days: 90
+          if-no-files-found: error
       - name: Compose diagnostics on failure
         if: failure()
         run: docker compose logs --no-color --tail=150

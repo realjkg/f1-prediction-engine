@@ -145,6 +145,11 @@ function releaseGates(inventoryVerified: boolean, accuracyEvidencePresent: boole
         : "The engine has not supplied a verifiable CycloneDX artifact. Check container build, source lockfiles, or integrity manifest.",
     },
     {
+      name: "Final-image operating-system inventory",
+      state: "CI artifact verification required",
+      detail: "A separate CycloneDX 1.6 artifact records Debian and Alpine packages installed in the final Docker images, bound to the image IDs and build commit. Review the matching build's artifact and signature status; this page does not pretend to verify or display image packages from the lockfile SBOM.",
+    },
+    {
       name: "Build and security checks",
       state: "Requires release-SHA CI evidence",
       detail: "Verify Python, web, dependency audit, CodeQL, TLS 1.3 container, mobile build and image checks against the same release commit. The UI does not have a signed CI attestation.",

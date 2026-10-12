@@ -1,6 +1,8 @@
 name: Secure TLS 1.3 Stack Smoke
 
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - "compose.tls.yaml"

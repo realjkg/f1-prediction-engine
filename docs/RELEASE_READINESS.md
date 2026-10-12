@@ -27,6 +27,7 @@ prospective evaluation.
 | TLS 1.3 transport | `compose.tls.yaml`, `scripts/serve-tls13.py`, `deploy/nginx-tls.conf`, MQTT collector | Synthetic certificate smoke passed; real public domain, certificate chain and provider handshake pending |
 | Dependency inventory SBOM | `scripts/generate-sbom.py`, `engine/f1engine/supply_chain.py`, `deploy/Dockerfile.engine` | Deterministic **CycloneDX 1.6 partial inventory** embedded in runtime image; source locks validated on each read |
 | Source-lock SBOM display | `GET /api/supply-chain` plus Inventory tab | `status=lockfile-inventory-only`, `releaseReady=false`; runtime smoke validates API response over localhost and TLS 1.3 |
+| Final-container OS package inventory | `scripts/generate-runtime-os-sbom.py`, `.github/workflows/container-validation.yml`, `docs/CONTAINER_OS_SBOM.md` | New separate final-image CycloneDX 1.6 CI artifact with installed Debian/Alpine package lists, image IDs and source hashes; CI evidence for release SHA required; unsigned, incomplete |
 | Web, engine and native build | Python/React CI, Docker Compose and mobile smoke | Last reviewed green CI: see below. Signed mobile-store release and actual endpoint testing remain separate |
 
 ### Precise SBOM contents
