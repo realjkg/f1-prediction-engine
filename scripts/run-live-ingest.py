@@ -55,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     cli.add_argument("--trace", type=Path, required=True)
     cli.add_argument("--artifacts", type=Path, required=True)
     cli.add_argument("--spool", type=Path, required=True)
+    cli.add_argument("--heartbeat", type=Path, help="durable private collector heartbeat JSON")
     cli.add_argument("--rights-reference", required=True)
     cli.add_argument("--prior", type=Path, help="frozen race-matched pre-race prior (JSON)")
     cli.add_argument("--scenario-weight", type=float, default=0.5)
@@ -92,6 +93,32 @@ def main(argv: list[str] | None = None) -> int:
 
     token, refresh_at = obtain_token()
     stop = threading.Event()
+    heartbeat_path = args.heartbeat or args.trace.with_suffix(".heartbeat.json")
+    connected = False
+    last_message_at: datetime | None = None
+
+    def write_heartbeat() -> None:
+        """Atomic, least-privilege status report. No credentials or payloads."""
+        heartbeat_path.parent.mkdir(parents=True, exist_ok=True)
+        status = {
+            "provider": "openf1", "season": args.season, "raceId": args.race_id,
+            "sessionKey": args.session_key, "connected": connected,
+            "updatedAt": datetime.now(UTC).isoformat(),
+            "lastMessageAt": last_message_at.isoformat() if last_message_at else None,
+        }
+        tmp = heartbeat_path.with_name(heartbeat_path.name + "." + str(os.getpid()) + ".tmp")
+        fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as output:
+                json.dump(status, output, sort_keys=True)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(tmp, heartbeat_path)
+        finally:
+            if tmp.exists():
+                tmp.unlink()
+
+    write_heartbeat()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
 
@@ -104,15 +131,33 @@ def main(argv: list[str] | None = None) -> int:
     client.reconnect_delay_set(min_delay=1, max_delay=30)
 
     def on_connect(_client, _userdata, _flags, reason_code, _properties):
+        nonlocal connected
         if reason_code != 0:
+            connected = False
+            write_heartbeat()
             emit("connection_rejected", reason=str(reason_code))
             return
-        for topic in TOPICS:
-            _client.subscribe(topic, qos=0)
-        emit("subscribed", topics=list(TOPICS), sessionKey=args.session_key)
+        subscriptions = [_client.subscribe(topic, qos=0)[0] for topic in TOPICS]
+        connected = all(code == mqtt.MQTT_ERR_SUCCESS for code in subscriptions)
+        write_heartbeat()
+        if connected:
+            emit("subscribed", topics=list(TOPICS), sessionKey=args.session_key)
+        else:
+            emit("subscription_failed", sessionKey=args.session_key)
+
+    def on_disconnect(_client, _userdata, _disconnect_flags, _reason_code, _properties):
+        nonlocal connected
+        connected = False
+        write_heartbeat()
 
     def on_message(_client, _userdata, message):
-        emission = ingestor.handle(message.topic, message.payload, datetime.now(UTC))
+        nonlocal last_message_at
+        now = datetime.now(UTC)
+        before = ingestor.stats.received
+        emission = ingestor.handle(message.topic, message.payload, now)
+        if ingestor.stats.received > before:
+            last_message_at = now
+            write_heartbeat()
         if emission is not None:
             emit(
                 "lap_checkpoint", lap=emission.lap, scenarioStatus=emission.scenario_status,
@@ -123,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
             stop.set()
 
     client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
     client.on_message = on_message
     client.connect(BROKER, PORT, keepalive=60)
     client.loop_start()
@@ -130,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
     deadline = time.monotonic() + args.max_runtime_seconds
     try:
         while not stop.wait(timeout=15):
+            write_heartbeat()
             if time.monotonic() >= deadline:
                 emit("max_runtime_reached")
                 break
@@ -148,6 +195,8 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         client.disconnect()
         client.loop_stop()
+        connected = False
+        write_heartbeat()
         stats = ingestor.stats
         emit(
             "stopped", received=stats.received, duplicates=stats.duplicates,
