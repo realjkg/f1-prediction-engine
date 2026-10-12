@@ -45,6 +45,15 @@ function errorHeadline(error: ApiError): string {
     case "ARTIFACT_TAMPERED":
     case "ACCURACY_REPORT_TAMPERED":
       return "The in-race evidence failed integrity or source validation.";
+    case "CLAUDE_UNAVAILABLE":
+      return "The optional Claude narrative is disabled or unavailable.";
+    case "CLAUDE_ACCESS_DENIED":
+      return "Operator authorization was not accepted.";
+    case "CLAUDE_REQUEST_INVALID":
+      return "The Claude demo request was not valid.";
+    case "CLAUDE_EVIDENCE_INVALID":
+    case "CLAUDE_EVIDENCE_MISSING":
+      return "No qualifying frozen historical evidence is available for this Claude brief.";
     case "SBOM_UNAVAILABLE":
       return "No generated software inventory is installed with this engine.";
     case "SBOM_INVALID":
