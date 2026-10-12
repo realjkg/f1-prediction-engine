@@ -72,6 +72,8 @@ jobs:
                   raise AssertionError(f"public endpoint leaked: {endpoint}")
           print("Unified OCI demo: UI, API, evidence, inventory and privacy gates passed")
           PY
+      - name: Exercise the same external contract as a deployed Vercel endpoint
+        run: python3 scripts/check-public-demo.py --local-loopback http://127.0.0.1:18080
       - name: Refuse plaintext standalone exposure
         run: |
           if docker run --rm --entrypoint python \
