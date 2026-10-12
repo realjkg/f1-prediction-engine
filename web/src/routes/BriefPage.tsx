@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { AdvisoryBanner } from "../components/AdvisoryBanner";
 import { ConsensusChip } from "../components/ConsensusChip";
 import { ResourceView } from "../components/EngineError";
@@ -7,6 +7,8 @@ import { isPredictionRecord, topPicks } from "../lib/calls";
 import { useEngineClient, useResource, type Resource } from "../lib/engine";
 import type { EngineClient } from "../lib/api";
 import { driverName } from "../lib/drivers";
+import { asApiError } from "../lib/api";
+import type { ClaudeBriefView } from "../types";
 import type { ConfigView, PredictionRecord, RaceSummary } from "../types";
 import { raceKeyOf } from "../types";
 
@@ -177,6 +179,7 @@ function BriefCard({ record, config }: BriefCardProps) {
         </dl>
       </div>
 
+      <ClaudeNarrative key={record.recordSha256} record={record} />
       <div className="ledger-limits">
         <h3>Declared limitations</h3>
         <ul>
@@ -187,5 +190,86 @@ function BriefCard({ record, config }: BriefCardProps) {
       </div>
       {record.advisoryOnly && <span className="advisory-tag">ADVISORY ONLY</span>}
     </article>
+  );
+}
+
+/**
+ * Optional operator-only Claude layer. The AI Gateway key is never sent to
+ * React. An operator-scoped access token is held only in component memory,
+ * never persisted in local storage, URLs, build assets or analytics.
+ */
+function ClaudeNarrative({ record }: { record: PredictionRecord }) {
+  const client = useEngineClient();
+  const [accessToken, setAccessToken] = useState("");
+  const [result, setResult] = useState<ClaudeBriefView | null>(null);
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  async function requestNarrative(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setResult(null);
+    setStatus("loading");
+    setErrorMessage("");
+    try {
+      const note = await client.getClaudeBrief(
+        record.race.raceId, record.race.season, accessToken,
+      );
+      if (note.recordSha256 !== record.recordSha256 ||
+          note.datasetSha256 !== record.dataset.sha256) {
+        throw new Error("Claude response refers to different evidence; narrative refused.");
+      }
+      setResult(note);
+      setStatus("idle");
+    } catch (cause) {
+      setErrorMessage(asApiError(cause).message);
+      setStatus("error");
+    } finally {
+      // Operator access is not retained between requests.
+      setAccessToken("");
+    }
+  }
+
+  return (
+    <section className="brief-digest" aria-label="Optional Claude race explanation">
+      <h3>Claude evidence brief</h3>
+      <p className="screen-intro">
+        Optional, operator-only historical interpretation. Claude describes
+        the frozen ensemble record; it cannot read live timing or change
+        the model's probabilities. This feature is disabled until the backend
+        AI Gateway and operator access are configured.
+      </p>
+      <form onSubmit={(event) => void requestNarrative(event)}>
+        <label htmlFor="claude-demo-access">Operator demo access token</label>
+        <input
+          id="claude-demo-access"
+          type="password"
+          autoComplete="off"
+          value={accessToken}
+          onChange={(event) => setAccessToken(event.target.value)}
+          minLength={24}
+          required
+          placeholder="Operator-only token"
+        />
+        <button
+          type="submit"
+          className="secondary-button"
+          disabled={status === "loading" || accessToken.length < 24}
+        >
+          {status === "loading" ? "Checking evidence…" : "Explain with Claude"}
+        </button>
+      </form>
+      {status === "error" && <p role="alert" className="advisory-banner is-warning">{errorMessage}</p>}
+      {result && (
+        <div className="brief-note" role="status">
+          <strong>AI-generated explanation · historical replay</strong>
+          <p>{result.text}</p>
+          <small>
+            Evidence: {result.recordSha256.slice(0, 12)} · Model: {result.model}
+            <br />
+            Narrative is not a live prediction or independently validated analysis.
+          </small>
+        </div>
+      )}
+    </section>
   );
 }
