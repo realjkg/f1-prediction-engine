@@ -1,0 +1,58 @@
+.scenario-explorer {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 13px;
+  padding: 0.9rem;
+  margin: 1rem 0;
+}
+.scenario-explorer__header,
+.scenario-explorer__focus-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.scenario-explorer__header h2 { margin: 0; }
+.scenario-explorer__header > span {
+  color: var(--color-warn);
+  border: 1px solid var(--color-warn);
+  padding: 0.2rem 0.4rem;
+  border-radius: 5px;
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+}
+.scenario-explorer__help, .scenario-explorer__foot {
+  color: var(--color-text-muted);
+  font-size: 0.73rem;
+  line-height: 1.5;
+}
+.scenario-explorer__drivers {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 0.2rem 0 0.7rem;
+}
+.scenario-explorer__driver {
+  flex: none;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+.scenario-explorer__driver small { color: var(--color-text-muted); margin-left: 0.2rem; font-size: 0.68rem; }
+.scenario-explorer__driver.is-selected { border-color: var(--color-accent); box-shadow: inset 0 0 0 1px var(--color-accent); }
+.scenario-explorer__driver:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.scenario-explorer__focus { border-radius: 9px; padding: 0.75rem; background: var(--color-surface-raised); }
+.scenario-explorer__focus-head { margin-bottom: 0.8rem; }
+.scenario-explorer__focus-head span { font-size: 0.7rem; color: var(--color-text-muted); }
+.scenario-explorer__focus label { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.75rem; margin: 0.7rem 0 0.3rem; }
+.scenario-explorer__focus progress { display: block; width: 100%; height: 0.65rem; border: 0; accent-color: var(--color-accent); }
+.scenario-explorer__foot { margin-bottom: 0; }

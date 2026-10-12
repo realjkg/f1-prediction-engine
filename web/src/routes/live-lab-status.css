@@ -1,0 +1,60 @@
+.feed-health {
+  margin: 0.8rem 0 1rem;
+  padding: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+.feed-health__header {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+.feed-health__header h2 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+.feed-health__tag {
+  border: 1px solid var(--color-warn);
+  color: var(--color-warn);
+  font-size: 0.59rem;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 0.2rem 0.48rem;
+  letter-spacing: 0.09em;
+}
+.feed-health__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0.8rem 0;
+}
+.feed-health__cell {
+  min-width: 0;
+  padding: 0.55rem;
+  border-radius: 8px;
+  background: var(--color-surface-raised);
+}
+.feed-health__cell dt {
+  color: var(--color-text-muted);
+  font-size: 0.67rem;
+  margin-bottom: 0.3rem;
+}
+.feed-health__cell dd {
+  margin: 0;
+  font-size: 0.71rem;
+  line-height: 1.4;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.feed-health__detail {
+  margin: 0;
+  font-size: 0.73rem;
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}
+@media (max-width: 370px) {
+  .feed-health__grid { grid-template-columns: 1fr; }
+}
