@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CallSheetView } from "../components/CallSheetView";
 import { RacePicker } from "../components/RacePicker";
+import { RaceTrackAnimation } from "../components/RaceTrackAnimation";
 import { RevealView } from "../components/RevealView";
 import { AdvisoryBanner } from "../components/AdvisoryBanner";
 import { ResourceView } from "../components/EngineError";
@@ -41,7 +42,9 @@ export function RacePage({ record, onLock, onOpenEvidence }: RacePageProps) {
   const [picked, setPicked] = useState<RaceSummary | null>(null);
 
   return (
-    <ResourceView
+    <>
+      {picked === null && <RaceTrackAnimation playedRounds={Object.keys(record.calls).length} streak={record.streak} badges={record.badges.length} />}
+      <ResourceView
       resource={useResource(() => client.getRaces(), [])}
       context="Race catalog"
       ready={(catalog) =>
@@ -61,7 +64,8 @@ export function RacePage({ record, onLock, onOpenEvidence }: RacePageProps) {
           />
         )
       }
-    />
+      />
+    </>
   );
 }
 
