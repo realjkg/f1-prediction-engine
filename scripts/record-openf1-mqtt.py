@@ -8,87 +8,24 @@ must produce per-lap checkpoints. No outcome labels or forecast are inferred.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
-import ssl
 import sys
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
-TOPICS = (
-    "v1/position", "v1/intervals", "v1/laps", "v1/pit",
-    "v1/stints", "v1/race_control", "v1/weather",
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "engine"))
+
+from f1engine.openf1_feed import (  # noqa: F401  (re-exported for tests and callers)
+    BROKER,
+    MAX_MESSAGE_BYTES,
+    PORT,
+    TOPICS,
+    build_tls_context,
+    normalize_message,
 )
-BROKER = "mqtt.openf1.org"
-PORT = 8883
-MAX_MESSAGE_BYTES = 512_000
-
-
-def build_tls_context() -> ssl.SSLContext:
-    """Require authenticated TLS 1.3+; never negotiate an older protocol.
-
-    If Python/OpenSSL lacks TLS 1.3 support, refuse collection rather than
-    weakening certificate validation or silently falling back to TLS 1.2.
-    """
-    if not ssl.HAS_TLSv1_3:
-        raise RuntimeError("TLS 1.3 is required; collector OpenSSL lacks support")
-    context = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
-    context.minimum_version = ssl.TLSVersion.TLSv1_3
-    context.verify_mode = ssl.CERT_REQUIRED
-    context.check_hostname = True
-    return context
-
-
-def normalize_message(
-    topic: str, payload: bytes, session_key: int, captured_at: datetime,
-) -> dict[str, object] | None:
-    """Keep provider _id/_key and exact bytes; reject other sessions and times."""
-    if topic not in TOPICS:
-        raise ValueError("unauthorized OpenF1 topic")
-    if not (0 < len(payload) <= MAX_MESSAGE_BYTES):
-        raise ValueError("invalid MQTT payload size")
-    if captured_at.tzinfo is None or captured_at.utcoffset() is None:
-        raise ValueError("capture clock must be timezone aware")
-    try:
-        text = payload.decode("utf-8")
-        message = json.loads(text)
-    except (UnicodeError, json.JSONDecodeError) as exc:
-        raise ValueError("invalid UTF-8 JSON MQTT payload") from exc
-    if not isinstance(message, dict):
-        raise ValueError("OpenF1 topic payload must be a JSON object")
-    if message.get("session_key") != session_key:
-        return None
-    provider_id = message.get("_id")
-    provider_key = message.get("_key")
-    if not isinstance(provider_id, int) or isinstance(provider_id, bool):
-        raise ValueError("missing provider sequence _id")
-    if not isinstance(provider_key, str) or not provider_key:
-        raise ValueError("missing provider document _key")
-    event_time = message.get("date")
-    if event_time is not None:
-        if not isinstance(event_time, str):
-            raise ValueError("invalid provider event time")
-        try:
-            timestamp = datetime.fromisoformat(event_time.replace("Z", "+00:00"))
-        except ValueError as exc:
-            raise ValueError("invalid provider event time") from exc
-        if timestamp.tzinfo is None:
-            raise ValueError("provider event timestamp has no timezone")
-        if timestamp > captured_at:
-            raise ValueError("provider event time follows capture clock")
-    return {
-        "provider": "openf1",
-        "topic": topic,
-        "sessionKey": session_key,
-        "providerSequence": provider_id,
-        "providerKey": provider_key,
-        "providerDate": event_time,
-        "capturedAt": captured_at.astimezone(UTC).isoformat(),
-        "rawPayloadSha256": hashlib.sha256(payload).hexdigest(),
-        "rawPayloadText": text,
-    }
 
 
 def main(argv: list[str] | None = None) -> int:

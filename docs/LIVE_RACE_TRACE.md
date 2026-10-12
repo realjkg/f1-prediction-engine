@@ -111,6 +111,43 @@ identity, and receive time. It never infers laps or writes win probabilities.
 The optional collector is **not active** until a licensed account and the
 optional dependency are provisioned. Logs never print tokens.
 
+### Live ingest (continuous, per-lap)
+
+`scripts/run-live-ingest.py` keeps the same authenticated MQTT/TLS 1.3
+connection open for a whole race and writes the artifacts the API already
+serves. Our side is a *client* of OpenF1's feed; there is no broker of our
+own. Each message is validated by the same normalizer as the collector,
+de-duplicated by provider `_id`, and appended to a durable spool (so any live
+run can be replayed offline with `bundle-openf1-spool.py`). When the leader
+completes a new lap, the ingestor projects an as-of checkpoint at that
+message's receive time, appends it to the chained trace, writes the scenario
+artifact and, if a frozen race-matched `--prior` is supplied, the paired
+fusion artifacts. Refusals (an entrant with no position yet, a lead change at
+the line) are counted and retried on the next lap document; nothing is
+filled in.
+
+```bash
+export OPENF1_USER="<your-licensed-account>"
+export OPENF1_PASSWORD="<backend-only-secret>"   # token is exchanged and refreshed
+python3 scripts/run-live-ingest.py \
+  --session-key <verified-session-key> --season 2026 --race-id <slug> \
+  --total-laps <laps> --entrants 1,4,16,... \
+  --trace data/live/<slug>-2026.jsonl --artifacts data/live/artifacts \
+  --spool data/live/<slug>-spool.jsonl \
+  --prior local/frozen-prior.json --scenario-weight 0.35 \
+  --rights-reference "<license-evidence-reference>"
+# Serve it: F1E_LAP_TRACE_PATH and F1E_INRACE_ARTIFACT_DIR point at the two paths above.
+```
+
+Leave Lap blank in the Live Lab to follow the latest checkpoint; the API
+refuses a latest live view older than 120 seconds. Historical results enter
+only through the frozen pre-race prior, never by being replayed as live data.
+The fusion weight is whatever you froze and stays unqualified until the
+chronological gate has run on real races. A static `OPENF1_ACCESS_TOKEN` also
+works, but the run ends when that hour-long token expires. The ingest has been
+tested offline with a synthetic message stream; it has not yet connected to the
+real broker.
+
 ## Next acceptance steps for Issue #31
 
 1. Obtain contractual permission and representative permitted OpenF1 session

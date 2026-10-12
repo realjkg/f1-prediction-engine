@@ -39,6 +39,8 @@ the simple current-leader baseline.
 
 1. `scripts/record-openf1-mqtt.py` captures permitted raw data over
    MQTT with certificate verification and TLS 1.3 minimum.
+   `scripts/run-live-ingest.py` does the same continuously and also writes the
+   per-lap checkpoint and artifacts (steps 2 and 3) as the race runs.
 2. `scripts/bundle-openf1-spool.py` selects the source records available at
    a declared cutoff. Later events cannot be silently substituted.
 3. `scripts/run-inrace-replay.py` turns those records into an immutable
