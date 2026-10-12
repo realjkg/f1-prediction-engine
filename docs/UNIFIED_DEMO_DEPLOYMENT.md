@@ -72,13 +72,16 @@ The image listens on its injected `PORT`. Build and demo paths are immutable;
 do not configure local live data paths, persistent source spools, OAuth
 tokens or production-only inference.
 
-**Blocking security deviation:** the Vercel-managed edge currently accepts
-**TLS 1.2 and TLS 1.3**, and its published guidance says tenants cannot
-disable TLS 1.2. Accordingly, **a Vercel public deployment is not a
-verified TLS-1.3-only end-to-end release**. Hosting the OCI preview on Vercel
-does not satisfy the previously approved no-downgrade requirement. Choose
-the TLS-1.3-only self-hosted mode for strict enforcement, or obtain an
-explicit change in security policy before using Vercel publicly.
+**Updated transport policy for the demonstration (October 12, 2026):**
+the browser-facing Vercel edge should **negotiate TLS 1.3 when the client
+supports it**, but TLS 1.2 can be accepted by Vercel-managed ingress for
+browser compatibility. Vercel controls edge TLS negotiation, not the React
+application, so the app itself cannot force TLS 1.3. Its published policy
+currently allows both TLS 1.2 and TLS 1.3. Do not describe a Vercel hostname
+as TLS-1.3-only. The **separate backend OpenF1 MQTT collector and direct
+AI Gateway outbound HTTPS client must enforce TLS 1.3 and refuse downgrade**;
+the self-hosted ingress option remains TLS-1.3-only when that stronger
+requirement applies. No sensitive tokens are included in frontend bundles.
 
 Vercel docs:
 - https://vercel.com/changelog/bring-your-dockerfile-to-vercel-functions
@@ -94,7 +97,8 @@ Vercel docs:
 - [x] Public app disables internal diagnostics and docs
 - [ ] GH Actions unified-image build/start/route/security smoke is green
 - [ ] Vercel project connected, actual image deployed and verified
-- [ ] TLS-1.3-only public edge verified (Vercel cannot currently certify)
+- [ ] Browser-edge TLS 1.3 negotiation confirmed in deployed endpoint (TLS 1.2 edge compatibility permitted)
+- [ ] Direct backend MQTT and AI Gateway TLS 1.3 handshakes verified using real accounts
 - [ ] Final image/native mobile SBOMs signed and verified
 - [ ] Real OpenF1 MQTT account, live race source rights and durable collector
 - [ ] Prospective trained and calibrated in-race model promoted after review
@@ -102,3 +106,31 @@ Vercel docs:
 The items above have different release stages: a historical **demo** can
 be presented independently of a production-calibrated **live predictor**.
 No frozen historical race score proves current-race accuracy.
+
+## 5. Optional Claude historical evidence brief
+
+The **Brief** tab includes an operator-only Claude panel. It is disabled
+unless the following are set as **server-side protected environment variables**
+in a Vercel project or on a self-hosted container:
+
+- `F1E_CLAUDE_ENABLED=1`
+- `AI_GATEWAY_API_KEY`: Vercel AI Gateway key held by the backend only
+- `F1E_CLAUDE_MODEL=anthropic/claude-sonnet-5`
+- `F1E_DEMO_ACCESS_TOKEN`: independent long random operator token, at least
+  24 characters, issued and managed by the demo owner
+
+Do not put either secret in `VITE_*` variables or store tokens in source.
+The operator provides their access token in the UI only when invoking the
+narrative, and the component clears it after the request. The key is never
+sent to the browser. Use Vercel Deployment Protection and request limits
+before opening access beyond trusted operators. The endpoint uses POST and
+cannot alter race models or ledgers. It returns a text-only commentary bound
+to the selected frozen prediction's record SHA-256; race classifications and
+live telemetry are not supplied to Claude. The outbound gateway connection
+requires TLS 1.3, with certificate and hostname verification.
+
+**Research disclaimer:** a Claude brief does not improve race prediction
+accuracy. Models remain the existing statistical engine. The current Vercel
+OCI demo is historical replay only, with no durable live MQTT subscriber.
+Enable this panel only after operator access controls, key management,
+model cost limits, and a real authenticated AI Gateway smoke test succeed.
