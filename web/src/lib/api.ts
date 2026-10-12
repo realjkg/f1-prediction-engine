@@ -31,6 +31,7 @@ import type {
   UpdatedScenario,
   InRaceAccuracyReport,
   SupplyChainView,
+  ClaudeBriefView,
 } from "../types";
 
 /**
@@ -60,6 +61,11 @@ export type EngineErrorCode =
   | "PRIOR_FUSION_NOT_FOUND"
   | "ACCURACY_REPORT_UNAVAILABLE"
   | "ACCURACY_REPORT_TAMPERED"
+  | "CLAUDE_UNAVAILABLE"
+  | "CLAUDE_ACCESS_DENIED"
+  | "CLAUDE_REQUEST_INVALID"
+  | "CLAUDE_EVIDENCE_INVALID"
+  | "CLAUDE_EVIDENCE_MISSING"
   // client (this module)
   | "ENGINE_UNREACHABLE"
   | "RESPONSE_INVALID"
@@ -153,6 +159,11 @@ const ERROR_CODES = new Set<EngineErrorCode>([
   "PRIOR_FUSION_NOT_FOUND",
   "ACCURACY_REPORT_UNAVAILABLE",
   "ACCURACY_REPORT_TAMPERED",
+  "CLAUDE_UNAVAILABLE",
+  "CLAUDE_ACCESS_DENIED",
+  "CLAUDE_REQUEST_INVALID",
+  "CLAUDE_EVIDENCE_INVALID",
+  "CLAUDE_EVIDENCE_MISSING",
   "ENGINE_UNREACHABLE",
   "RESPONSE_INVALID",
   "RESPONSE_NOT_OK",
@@ -191,6 +202,8 @@ export interface EngineClient {
   getEvidence(offset: number, limit: number): Promise<EvidencePageView>;
   getEvents(): Promise<EventsView>;
   getConfig(): Promise<ConfigView>;
+  /** Server-side Claude reads frozen evidence; caller supplies operator-only access. */
+  getClaudeBrief(raceId: string, season: number, accessToken: string): Promise<ClaudeBriefView>;
   getSupplyChain(): Promise<SupplyChainView>;
   getMetrics(): Promise<string>;
   /**
@@ -249,6 +262,50 @@ export function createEngineClient(
     return data as T;
   }
 
+  async function claudeBrief(
+    raceId: string, season: number, accessToken: string,
+  ): Promise<ClaudeBriefView> {
+    if (!/^[a-z0-9_-]{1,100}$/.test(raceId) || !Number.isInteger(season) ||
+        season < 1950 || season > 2100 || accessToken.length < 24) {
+      throw new ApiError("CLAUDE_REQUEST_INVALID", "Invalid race selection or operator access");
+    }
+    let response: Response;
+    try {
+      response = await fetchImpl(`${baseUrl}/api/claude/brief`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "x-f1e-demo-access": accessToken,
+        },
+        body: JSON.stringify({ raceId, season }),
+        cache: "no-store",
+      });
+    } catch {
+      throw new ApiError("ENGINE_UNREACHABLE", "Claude demo endpoint unavailable");
+    }
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch {
+      throw new ApiError("RESPONSE_INVALID", "Claude endpoint returned non-JSON content");
+    }
+    if (!response.ok) throw errorFromResponse(response, data);
+    assertShape(data, "/api/claude/brief", [
+      "mode", "model", "raceId", "season", "datasetSha256", "recordSha256",
+      "evidenceSha256", "text", "advisoryOnly", "modelPredictsOutcomes", "historicalReplay",
+    ]);
+    const v = data as ClaudeBriefView;
+    if (v.advisoryOnly !== true || v.modelPredictsOutcomes !== false ||
+        v.historicalReplay !== true || v.mode !== "claude-evidence-narrative" ||
+        v.raceId !== raceId || v.season !== season || typeof v.text !== "string" ||
+        v.text.length === 0 || v.text.length > 2000 ||
+        !/^[0-9a-f]{64}$/.test(v.recordSha256)) {
+      throw new ApiError("RESPONSE_INVALID", "Claude evidence identity or status invalid");
+    }
+    return v;
+  }
+
   const seasonQuery = (season: number): string => `season=${season}`;
 
   return {
@@ -294,6 +351,7 @@ export function createEngineClient(
       ]),
     getEvents: () => getJson<EventsView>("/api/events", ["events", "total"]),
     getConfig: () => getJson<ConfigView>("/api/config", ["engineVersion", "briefMode"]),
+    getClaudeBrief: claudeBrief,
     getSupplyChain: () => getJson<SupplyChainView>("/api/supply-chain", [
       "status", "specVersion", "totalComponents", "ecosystemCounts",
       "sbomSha256", "components", "limitations", "releaseReady",
