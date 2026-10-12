@@ -1,6 +1,8 @@
 name: Container Integration Smoke
 
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - "compose.yaml"
