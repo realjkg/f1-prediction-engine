@@ -26,6 +26,8 @@ describe("App shell (engine-backed)", () => {
     // The picker waits for the engine catalog, then renders.
     expect(await screen.findByRole("heading", { name: "Pick a round" })).toBeTruthy();
     expect(await screen.findByRole("button", { name: /Bahrain Grand Prix/ })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Race Rewind animated warm-up" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Pause cars" })).toBeTruthy();
   });
 
   it("switches panels when a tab is pressed", async () => {
@@ -42,6 +44,8 @@ describe("App shell (engine-backed)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Live Lab" }));
     expect(screen.getByRole("heading", { name: "In-race Lab" })).toBeTruthy();
     expect(screen.getByText(/Scenario frequencies are not calibrated/)).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Live feed and inference status" })).toBeTruthy();
+    expect(screen.getByText(/Manual or 15-second polling; not a live stream/)).toBeTruthy();
     expect(await screen.findByText(/no simulation to show/i)).toBeTruthy();
   });
 
