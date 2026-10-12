@@ -109,8 +109,10 @@ def fetch_access_token(
         TOKEN_URL, data=body, method="POST",
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
-    context = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH)
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    # The token endpoint is part of the same protected telemetry boundary.
+    # Enforce TLS 1.3+ and verified hostname/CA, just like the MQTT channel;
+    # a TLS 1.2-only endpoint is a hard failure, never a downgrade.
+    context = build_tls_context()
     try:
         with urllib.request.urlopen(request, timeout=timeout, context=context) as reply:
             raw = reply.read(MAX_TOKEN_RESPONSE_BYTES + 1)
