@@ -51,7 +51,10 @@ def test_exact_reproducibility_and_image_identity(
     )
     generator.generate(two, engine, web, engine_id=ENGINE_ID, web_id=WEB_ID, commit=COMMIT)
     assert one.read_bytes() == two.read_bytes()
-    assert one.with_suffix(".manifest.json").read_bytes() == two.with_suffix(".manifest.json").read_bytes()
+    assert (
+        one.with_suffix(".manifest.json").read_bytes()
+        == two.with_suffix(".manifest.json").read_bytes()
+    )
     assert manifest["componentCount"] == 6
     assert manifest["ecosystemCounts"] == {"deb": 3, "apk": 3}
     assert generator.verify(one, engine, web) == manifest
