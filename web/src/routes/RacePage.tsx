@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { CallSheetView } from "../components/CallSheetView";
 import { RacePicker } from "../components/RacePicker";
-import { RaceTrackAnimation } from "../components/RaceTrackAnimation";
+import { GameHub } from "../components/GameHub";
 import { RevealView } from "../components/RevealView";
 import { AdvisoryBanner } from "../components/AdvisoryBanner";
 import { ResourceView } from "../components/EngineError";
@@ -28,6 +28,7 @@ interface RacePageProps {
    */
   onLock: (race: RaceIdentity, call: RoundCall, predictionRecord: PredictionRecord) => Promise<LockOutcome>;
   onOpenEvidence: () => void;
+  onViewStandings: () => void;
 }
 
 type Stage = "sheet" | "reveal";
@@ -37,19 +38,21 @@ type Stage = "sheet" | "reveal";
  * → lock (engine-scored) → the reveal. The picked round is keyed into the
  * flow below, so per-round resources and picks reset cleanly on next-round.
  */
-export function RacePage({ record, onLock, onOpenEvidence }: RacePageProps) {
+export function RacePage({ record, onLock, onOpenEvidence, onViewStandings }: RacePageProps) {
   const client = useEngineClient();
   const [picked, setPicked] = useState<RaceSummary | null>(null);
 
   return (
     <>
-      {picked === null && <RaceTrackAnimation playedRounds={Object.keys(record.calls).length} streak={record.streak} badges={record.badges.length} />}
       <ResourceView
       resource={useResource(() => client.getRaces(), [])}
       context="Race catalog"
       ready={(catalog) =>
         picked == null ? (
-          <RacePicker races={catalog.races} record={record} onPick={setPicked} />
+          <>
+            <GameHub record={record} races={catalog.races} onStart={setPicked} onViewStandings={onViewStandings} />
+            <RacePicker races={catalog.races} record={record} onPick={setPicked} />
+          </>
         ) : (
           <RoundFlow
             key={raceKeyOf(picked.season, picked.round, picked.raceId)}
