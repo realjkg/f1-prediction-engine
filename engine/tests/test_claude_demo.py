@@ -13,7 +13,6 @@ from f1engine.app import ApiSettings, create_app
 from f1engine.claude_demo import (
     ClaudeDemoSettings,
     authenticated,
-    evidence_payload,
     register_claude_demo,
     tls_context,
 )
