@@ -1,3 +1,18 @@
+/** Optional AI Gateway narrative. No driver outcome probabilities are generated. */
+export interface ClaudeBriefView {
+  mode: "claude-evidence-narrative";
+  model: string;
+  raceId: string;
+  season: number;
+  datasetSha256: string;
+  recordSha256: string;
+  evidenceSha256: string;
+  text: string;
+  advisoryOnly: true;
+  modelPredictsOutcomes: false;
+  historicalReplay: true;
+}
+
 /**
  * TypeScript mirrors of the engine's wire schemas — the API contract the UI
  * consumes. Field names follow the engine's camelCase wire convention
