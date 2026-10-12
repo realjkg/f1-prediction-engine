@@ -36,6 +36,11 @@ export function LiveLabPage() {
     [query.raceId, query.season, query.lap, tick],
   );
 
+  const source = useResource(
+    () => client.getLiveStatus(query.raceId, query.season),
+    [query.raceId, query.season, tick],
+  );
+
   const accuracy = useResource(() => client.getInraceAccuracy(), [tick]);
 
   const run = (event: FormEvent<HTMLFormElement>) => {
@@ -69,22 +74,25 @@ export function LiveLabPage() {
       <section className="feed-health" aria-label="Live feed and inference status">
         <div className="feed-health__header">
           <h2>Timing feed &amp; inference</h2>
-          <span className="feed-health__tag">LIVE NOT VERIFIED</span>
+          <span className="feed-health__tag">{source.status === "ready"
+            ? source.data.feedState === "connected" ? "MQTT CONNECTED" : "FEED " + source.data.feedState.toUpperCase()
+            : source.status === "loading" ? "CHECKING SOURCE" : "SOURCE UNAVAILABLE"}</span>
         </div>
         <dl className="feed-health__grid">
           <div className="feed-health__cell">
             <dt>Checkpoint source</dt>
-            <dd>{result.status === "ready"
-              ? "Stored: " + result.data.sourceType
-              : result.status === "loading"
-                ? "Checking stored evidence"
-                : result.error.code === "LIVE_SCENARIO_UNAVAILABLE"
-                  ? "Not configured"
-                  : "No verified checkpoint"}</dd>
+            <dd>{source.status === "ready"
+              ? source.data.evidenceState === "none" ? "No verified checkpoint" :
+                source.data.evidenceState + (source.data.lap ? " · Lap " + source.data.lap : "")
+              : source.status === "loading" ? "Checking evidence" : "Status unavailable"}</dd>
           </div>
           <div className="feed-health__cell">
             <dt>Inference</dt>
-            <dd>Read-only artifacts; no on-demand prediction</dd>
+            <dd>{source.status === "ready"
+              ? source.data.inferenceState === "conditional-research"
+                ? "Recorded conditional research"
+                : "No checkpoint inference"
+              : "No verified live inference"}</dd>
           </div>
           <div className="feed-health__cell">
             <dt>Updates</dt>
@@ -92,9 +100,10 @@ export function LiveLabPage() {
           </div>
         </dl>
         <p className="feed-health__detail">
-          For a live race, a licensed timing stream must first reach a private, persistent
-          collector. A separate inference worker must then generate, qualify, and publish
-          timestamped evidence. This Vercel demo cannot perform that work by refreshing the page.
+          A real OpenF1 MQTT connection requires a licensed account, a running private collector
+          and verified race-specific evidence. The app reports a collector as connected only
+          when its broker heartbeat and recent source messages are recorded. This status
+          does not claim that research scenarios are qualified winner forecasts.
         </p>
       </section>
       <form className="live-lab-form" onSubmit={run}>
