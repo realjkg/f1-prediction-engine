@@ -97,26 +97,31 @@ def main(argv: list[str] | None = None) -> int:
     connected = False
     last_message_at: datetime | None = None
 
+    heartbeat_lock = threading.Lock()
+
     def write_heartbeat() -> None:
         """Atomic, least-privilege status report. No credentials or payloads."""
-        heartbeat_path.parent.mkdir(parents=True, exist_ok=True)
-        status = {
-            "provider": "openf1", "season": args.season, "raceId": args.race_id,
-            "sessionKey": args.session_key, "connected": connected,
-            "updatedAt": datetime.now(UTC).isoformat(),
-            "lastMessageAt": last_message_at.isoformat() if last_message_at else None,
-        }
-        tmp = heartbeat_path.with_name(heartbeat_path.name + "." + str(os.getpid()) + ".tmp")
-        fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as output:
-                json.dump(status, output, sort_keys=True)
-                output.flush()
-                os.fsync(output.fileno())
-            os.replace(tmp, heartbeat_path)
-        finally:
-            if tmp.exists():
-                tmp.unlink()
+        with heartbeat_lock:
+            heartbeat_path.parent.mkdir(parents=True, exist_ok=True)
+            status = {
+                "provider": "openf1", "season": args.season, "raceId": args.race_id,
+                "sessionKey": args.session_key, "connected": connected,
+                "updatedAt": datetime.now(UTC).isoformat(),
+                "lastMessageAt": last_message_at.isoformat() if last_message_at else None,
+            }
+            tmp = heartbeat_path.with_name(
+                heartbeat_path.name + "." + str(os.getpid()) + ".tmp"
+            )
+            fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as output:
+                    json.dump(status, output, sort_keys=True)
+                    output.flush()
+                    os.fsync(output.fileno())
+                os.replace(tmp, heartbeat_path)
+            finally:
+                if tmp.exists():
+                    tmp.unlink()
 
     write_heartbeat()
     for sig in (signal.SIGINT, signal.SIGTERM):
