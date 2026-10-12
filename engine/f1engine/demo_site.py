@@ -20,10 +20,14 @@ from f1engine.ingestion import load_snapshot
 from f1engine.supply_chain import read_supply_chain
 
 
-def create_unified_demo() -> FastAPI:
+def create_unified_demo(
+    *, settings: ApiSettings | None = None, static_dir: Path | None = None,
+) -> FastAPI:
     """Serve app and API at one origin; fail on absent build evidence."""
-    settings = ApiSettings.from_env()
-    static_dir = Path(os.environ.get("F1E_DEMO_WEB_DIR", "/app/web/dist"))
+    settings = settings if settings is not None else ApiSettings.from_env()
+    static_dir = static_dir if static_dir is not None else Path(
+        os.environ.get("F1E_DEMO_WEB_DIR", "/app/web/dist")
+    )
     if not static_dir.is_dir() or not (static_dir / "index.html").is_file():
         raise RuntimeError("Unified demo web bundle missing at startup")
     if not settings.ledger_path.is_file():
