@@ -1,6 +1,8 @@
 name: Mobile Native Build Smoke
 
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - "web/**"
