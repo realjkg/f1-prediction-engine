@@ -20,7 +20,7 @@ from urllib.request import Request, urlopen
 def request(origin: str, path: str, *, method: str = "GET", data: bytes | None = None):
     req = Request(
         origin + path, method=method, data=data,
-        headers={"Accept": "application/json"},
+        headers={"Accept": "application/json", **({"Content-Type": "application/json"} if data is not None else {})},
     )
     try:
         with urlopen(req, timeout=20) as response:
