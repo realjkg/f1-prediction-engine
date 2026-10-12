@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { EngineErrorPanel, Loading } from "../components/EngineError";
+import "./live-lab-status.css";
 import { useEngineClient, useResource } from "../lib/engine";
 import type { InRaceAccuracyReport, InRaceRunArtifact, UpdatedScenario } from "../types";
 
@@ -63,6 +64,38 @@ export function LiveLabPage() {
         Research mode. Scenario frequencies are not calibrated winner probabilities.
         No automatic model promotion or live betting recommendations.
       </div>
+
+      <section className="feed-health" aria-label="Live feed and inference status">
+        <div className="feed-health__header">
+          <h2>Timing feed &amp; inference</h2>
+          <span className="feed-health__tag">LIVE NOT VERIFIED</span>
+        </div>
+        <dl className="feed-health__grid">
+          <div className="feed-health__cell">
+            <dt>Checkpoint source</dt>
+            <dd>{result.status === "ready"
+              ? "Stored: " + result.data.sourceType
+              : result.status === "loading"
+                ? "Checking stored evidence"
+                : result.error.code === "LIVE_SCENARIO_UNAVAILABLE"
+                  ? "Not configured"
+                  : "No verified checkpoint"}</dd>
+          </div>
+          <div className="feed-health__cell">
+            <dt>Inference</dt>
+            <dd>Read-only artifacts; no on-demand prediction</dd>
+          </div>
+          <div className="feed-health__cell">
+            <dt>Updates</dt>
+            <dd>Manual or 15-second polling; not a live stream</dd>
+          </div>
+        </dl>
+        <p className="feed-health__detail">
+          For a live race, a licensed timing stream must first reach a private, persistent
+          collector. A separate inference worker must then generate, qualify, and publish
+          timestamped evidence. This Vercel demo cannot perform that work by refreshing the page.
+        </p>
+      </section>
       <form className="live-lab-form" onSubmit={run}>
         <label htmlFor="live-race">Race slug
           <input id="live-race" value={raceInput} required onChange={(e) => setRaceInput(e.target.value)} />
