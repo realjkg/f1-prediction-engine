@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { EngineErrorPanel, Loading } from "../components/EngineError";
+import { ScenarioExplorer } from "../components/ScenarioExplorer";
 import "./live-lab-status.css";
 import { useEngineClient, useResource } from "../lib/engine";
 import type { InRaceAccuracyReport, InRaceRunArtifact, UpdatedScenario } from "../types";
@@ -250,6 +251,7 @@ function ScenarioDetails({ artifact }: { artifact: InRaceRunArtifact }) {
             {scenario.trials.toLocaleString()} deterministic conditional trials.
             Frozen as of {new Date(scenario.observedAt).toLocaleString()}.
           </p>
+          <ScenarioExplorer scenario={scenario} />
           <h2>Observed vs. conditional scenario</h2>
           <table className="standings-table">
             <thead><tr><th scope="col">Driver #</th><th scope="col">Now</th>
