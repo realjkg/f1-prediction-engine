@@ -23,8 +23,8 @@ from typing import Literal
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import Field
 
-from f1engine.evidence import EvidenceError, PredictionRecord
 from f1engine.app import LedgerStore
+from f1engine.evidence import EvidenceError, PredictionRecord
 from f1engine.wire import WireModel
 
 GATEWAY_HOST = "ai-gateway.vercel.sh"
