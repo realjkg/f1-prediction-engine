@@ -64,7 +64,16 @@ def main(argv: list[str] | None = None) -> int:
     args = cli.parse_args(argv)
 
     user = os.environ.get("OPENF1_USER", "")
-    password = os.environ.get("OPENF1_PASSWORD", "")
+    password_file = os.environ.get("OPENF1_PASSWORD_FILE", "")
+    if password_file and os.environ.get("OPENF1_PASSWORD"):
+        cli.error("configure either OPENF1_PASSWORD or OPENF1_PASSWORD_FILE, not both")
+    if password_file:
+        try:
+            password = Path(password_file).read_text(encoding="utf-8").strip()
+        except OSError:
+            cli.error("provider credential secret file is not readable")
+    else:
+        password = os.environ.get("OPENF1_PASSWORD", "")
     static_token = os.environ.get("OPENF1_ACCESS_TOKEN", "")
     if not user or not (password or static_token):
         cli.error("set OPENF1_USER and OPENF1_PASSWORD (or OPENF1_ACCESS_TOKEN) in the backend environment")
