@@ -15,6 +15,7 @@ from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from f1engine.app import ApiSettings, create_app
+from f1engine.claude_demo import register_claude_demo
 from f1engine.evidence import verify_chain
 from f1engine.ingestion import load_snapshot
 from f1engine.supply_chain import read_supply_chain
@@ -37,6 +38,7 @@ def create_unified_demo(
     verify_chain(settings.ledger_path)
     read_supply_chain(settings.sbom_path, source_root=settings.sbom_source_root)
     app = create_app(settings)
+    register_claude_demo(app, ledger_path=settings.ledger_path)
 
     @app.middleware("http")
     async def public_demo_security(request, call_next):
