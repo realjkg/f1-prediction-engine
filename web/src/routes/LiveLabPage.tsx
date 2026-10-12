@@ -54,8 +54,10 @@ export function LiveLabPage() {
     <section className="live-lab" aria-label="In-race analysis">
       <h1>In-race Lab</h1>
       <p className="screen-intro">
-        Replays verified lap checkpoints and experimental finish scenarios. A stored
-        artifact is not proof that a live telemetry feed is connected.
+        Shows verified lap checkpoints and experimental finish scenarios: recorded
+        replays, or the latest lap from the live ingest when it is running. Leave Lap
+        blank to follow the latest checkpoint. The source label on each checkpoint says
+        which kind it is, and a stored artifact alone is not proof a feed is connected.
       </p>
       <div className="advisory-banner is-warning">
         Research mode. Scenario frequencies are not calibrated winner probabilities.

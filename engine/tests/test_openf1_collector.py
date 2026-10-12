@@ -79,6 +79,6 @@ def test_mqtt_tls_context_requires_tls13_and_verifies_broker() -> None:
 
 def test_tls13_unavailable_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     collector = module()
-    monkeypatch.setattr(collector.ssl, "HAS_TLSv1_3", False)
+    monkeypatch.setattr(ssl, "HAS_TLSv1_3", False)
     with pytest.raises(RuntimeError, match="TLS 1.3 is required"):
         collector.build_tls_context()

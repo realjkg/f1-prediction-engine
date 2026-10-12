@@ -16,7 +16,7 @@ prospective evaluation.
 | Artifact/capability | Actual implementation | Evidence/state |
 | --- | --- | --- |
 | Existing pre-race model and chronological challenger search | `engine/f1engine/store_benchmark.py`, `model_search.py`, `training_store.py`; `scripts/search-f1-challengers.py` | Historical 2025/2026 **research**, not timestamp-proven live accuracy; promotion blocked (#25) |
-| Authorized backend MQTT capture | `scripts/record-openf1-mqtt.py` | Broker/topic validation, server-only credentials and TLS 1.3; **real licensed broker connection unverified** |
+| Authorized backend MQTT capture and live per-lap ingest | `scripts/record-openf1-mqtt.py`, `scripts/run-live-ingest.py` | Broker/topic validation, server-only credentials and TLS 1.3; **real licensed broker connection unverified** |
 | Source-to-lap reconstruction | `scripts/bundle-openf1-spool.py`, `engine/f1engine/openf1_projection.py` | Cutoff-bounded replay with missing/late input refusals; real lap-25/62 Singapore source **not archived/verified** |
 | Immutable observation trace | `engine/f1engine/lap_trace.py`, `scripts/run-inrace-replay.py` | Source hashes and chained checkpoints; hashes prove integrity, **not independent provider authenticity** |
 | Conditional simulated continuation | `engine/f1engine/race_simulator.py`, `inrace_pipeline.py` | Experimental green-flag/no-more-stops scenario; not calibrated for pits, tire wear, cautions, incidents or retirements |
@@ -72,7 +72,7 @@ together before release.
 | Gate | State | Acceptance evidence still required |
 | --- | --- | --- |
 | [x] Source model inference and historic ML baselines | Implemented | Keep 2024 demonstration separate from 2026 research |
-| [x] Raw MQTT ingest code, event cutoff and trace hashing | Implemented/tested offline | Authorized license and real live provider connection |
+| [x] Raw MQTT ingest code, live per-lap ingest, event cutoff and trace hashing | Implemented/tested offline with a synthetic stream | Authorized license and real live provider connection |
 | [x] Research model-combination code and immutable evaluator | Implemented/tested offline | Real independent training and held-out race outcome archives |
 | [x] Web Live Lab and searchable Inventory screen | Implemented | Signed deployed app smoke and real user acceptance |
 | [x] Partial reproducible lockfile SBOM in runtime image | Implemented | Container/native installed-software scans and signed artifacts |
