@@ -311,6 +311,14 @@ export function installMockEngine(): MockEngine {
     const path = parsed.pathname;
     const parts = path.split("/"); // e.g. ["", "api", "races", "bahrain-gp", "score"]
     if (path.startsWith("/api/config")) return jsonResponse(CONFIG);
+    if (path === "/api/live/status") return jsonResponse({
+      feedState: "not-configured", evidenceState: "none",
+      inferenceState: "unavailable", season: Number(parsed.searchParams.get("season") ?? 2026),
+      raceId: parsed.searchParams.get("race_id") ?? "singapore", broker: "openf1",
+      lastMessageAt: null, lastCheckpointAt: null, lap: null, totalLaps: null,
+      sourceType: null, checkpointSha256: null, qualifiedForProduction: false,
+      modelPromoted: false,
+    });
     if (parts[2] === "races" && parts[4] === "score") {
       const raceId = parts[3] ?? "";
       const callParts = (parsed.searchParams.get("call") ?? ",").split(",");
