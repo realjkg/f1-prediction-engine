@@ -26,8 +26,19 @@ describe("App shell (engine-backed)", () => {
     // The picker waits for the engine catalog, then renders.
     expect(await screen.findByRole("heading", { name: "Pick a round" })).toBeTruthy();
     expect(await screen.findByRole("button", { name: /Bahrain Grand Prix/ })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Grand Prix Challenge game" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /START CHALLENGE/ })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Race Rewind animated warm-up" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Pause cars" })).toBeTruthy();
+  });
+
+  it("starts a playable historical podium challenge from the game home", async () => {
+    render(<App />);
+    await screen.findByRole("heading", { name: "Pick a round" });
+    fireEvent.click(screen.getByRole("button", { name: /START CHALLENGE/ }));
+    expect(await screen.findByRole("heading", { name: "Bahrain Grand Prix" })).toBeTruthy();
+    expect(screen.getByText(/pick your podium/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Pick 3 more" })).toBeTruthy();
   });
 
   it("switches panels when a tab is pressed", async () => {
