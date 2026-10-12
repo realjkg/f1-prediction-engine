@@ -11,6 +11,7 @@ import type {
 } from "../types";
 import { ConsensusChip } from "./ConsensusChip";
 import { Confetti } from "./Confetti";
+import { FinishOrderReplay } from "./FinishOrderReplay";
 import { ModelCard } from "./ModelCard";
 import { ReplayDots } from "./ReplayDots";
 import { RoundScoreCard } from "./RoundScoreCard";
@@ -94,6 +95,8 @@ export function RevealView({
         {score.round.consensusFlag && <ConsensusChip flag={score.round.consensusFlag} coinFlip />}
         <p className="reveal-hindsight">Open replay — the models never saw this result; you may remember it.</p>
       </header>
+
+      <FinishOrderReplay result={result} />
 
       <section className="actual-result" aria-label="Actual result">
         <h2>Actual podium</h2>
