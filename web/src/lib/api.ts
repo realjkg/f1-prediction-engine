@@ -32,6 +32,7 @@ import type {
   InRaceAccuracyReport,
   SupplyChainView,
   ClaudeBriefView,
+  LiveStatusView,
 } from "../types";
 
 /**
@@ -57,6 +58,7 @@ export type EngineErrorCode =
   | "LAP_TRACE_TAMPERED"
   | "ARTIFACT_TAMPERED"
   | "LIVE_SCENARIO_UNAVAILABLE"
+  | "LIVE_STATUS_INVALID"
   | "SCENARIO_NOT_FOUND"
   | "PRIOR_FUSION_NOT_FOUND"
   | "ACCURACY_REPORT_UNAVAILABLE"
@@ -155,6 +157,7 @@ const ERROR_CODES = new Set<EngineErrorCode>([
   "LAP_TRACE_TAMPERED",
   "ARTIFACT_TAMPERED",
   "LIVE_SCENARIO_UNAVAILABLE",
+  "LIVE_STATUS_INVALID",
   "SCENARIO_NOT_FOUND",
   "PRIOR_FUSION_NOT_FOUND",
   "ACCURACY_REPORT_UNAVAILABLE",
@@ -187,6 +190,7 @@ export interface EngineClient {
   getLapScenario(raceId: string, season: number, lap?: number): Promise<InRaceRunArtifact>;
   getLapFusion(raceId: string, season: number, lap?: number): Promise<UpdatedScenario>;
   getInraceAccuracy(): Promise<InRaceAccuracyReport>;
+  getLiveStatus(raceId: string, season: number): Promise<LiveStatusView>;
   /**
    * The engine-computed round score — consensus flag from the ledger
    * server-side, streak_before from the pit-wall record. The client never
@@ -327,6 +331,9 @@ export function createEngineClient(
           (lap === undefined ? "" : `&lap=${lap}`),
         ["status", "checkpointSha256", "sourcePriorSha256", "candidates", "promoted"],
       ),
+    getLiveStatus: (raceId, season) =>
+      getJson<LiveStatusView>(`/api/live/status?race_id=${encodeURIComponent(raceId)}&season=${season}`,
+        ["feedState", "evidenceState", "inferenceState", "qualifiedForProduction"]),
     getInraceAccuracy: () =>
       getJson<InRaceAccuracyReport>("/api/inrace/accuracy", [
         "revision", "researchOnly", "modelPromotionAllowed", "pairedSummary", "reportSha256",
