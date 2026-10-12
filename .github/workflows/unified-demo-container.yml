@@ -42,7 +42,7 @@ jobs:
                   with urlopen(base + "/healthz", timeout=3) as response:
                       if json.load(response)["status"] == "ok":
                           break
-              except (URLError, TimeoutError, ValueError):
+              except (OSError, ValueError):
                   time.sleep(2)
           else:
               raise AssertionError("unified container did not become healthy")
