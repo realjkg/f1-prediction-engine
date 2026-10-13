@@ -3,15 +3,13 @@ import { EngineErrorPanel, Loading } from "../components/EngineError";
 import { ScenarioExplorer } from "../components/ScenarioExplorer";
 import "./live-lab-status.css";
 import { useEngineClient, useResource } from "../lib/engine";
+import { LIVE_RACE_ID, LIVE_SEASON, isLive, liveWord } from "../lib/live";
 import type { InRaceAccuracyReport, InRaceRunArtifact, UpdatedScenario } from "../types";
 
 const formatNumber = (value: number) => value.toFixed(1);
 
-// Build-time defaults for the Live Lab form. The container demo sets these to its
-// synthetic race so the first screen has something to show; ordinary builds
-// keep the real-race defaults. Public values only, never secrets.
-const DEFAULT_RACE = import.meta.env.VITE_LIVE_LAB_RACE?.trim() || "singapore";
-const DEFAULT_SEASON = import.meta.env.VITE_LIVE_LAB_SEASON?.trim() || "2026";
+const DEFAULT_RACE = LIVE_RACE_ID;
+const DEFAULT_SEASON = LIVE_SEASON;
 
 /**
  * In-race Lab — reads a VERIFIED local artifact. Never synthesizes a new
@@ -82,9 +80,7 @@ export function LiveLabPage() {
       <section className="feed-health" aria-label="Live feed and inference status">
         <div className="feed-health__header">
           <h2>Timing feed &amp; inference</h2>
-          <span className="feed-health__tag">{source.status === "ready"
-            ? source.data.feedState === "connected" ? "MQTT CONNECTED" : "FEED " + source.data.feedState.toUpperCase()
-            : source.status === "loading" ? "CHECKING SOURCE" : "SOURCE UNAVAILABLE"}</span>
+          <span className="feed-health__tag">{source.status === "loading" ? "CHECKING SOURCE" : liveWord(source.status === "ready" && isLive(source.data))}</span>
         </div>
         <dl className="feed-health__grid">
           <div className="feed-health__cell">

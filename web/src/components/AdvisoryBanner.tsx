@@ -1,4 +1,4 @@
-import { advisoryBasis, useConfig } from "../lib/engine";
+import { advisoryBasis, useConfig, useLiveNow } from "../lib/engine";
 
 interface AdvisoryBannerProps {
   /** Override text — defaults to the engine's evidence basis for the current brief mode. */
@@ -6,7 +6,7 @@ interface AdvisoryBannerProps {
   tone?: "default" | "warning";
 }
 
-const FALLBACK_BASIS = "REAL MODELS — PINNED DATASET 2020–2024 — NO LIVE INFERENCE";
+const FALLBACK_BASIS = "REAL MODELS — PINNED DATASET 2020–2024 — NOT LIVE";
 
 /**
  * The evidence-basis strip — advisory labeling, always visible. The default
@@ -15,7 +15,8 @@ const FALLBACK_BASIS = "REAL MODELS — PINNED DATASET 2020–2024 — NO LIVE I
  */
 export function AdvisoryBanner({ text, tone = "default" }: AdvisoryBannerProps) {
   const config = useConfig();
-  const basis = text ?? (config.status === "ready" ? advisoryBasis(config.config) : FALLBACK_BASIS);
+  const live = useLiveNow();
+  const basis = text ?? (config.status === "ready" ? advisoryBasis(config.config, live) : FALLBACK_BASIS);
   return (
     <div className={`advisory-banner${tone === "warning" ? " is-warning" : ""}`} role="note">
       {basis}
