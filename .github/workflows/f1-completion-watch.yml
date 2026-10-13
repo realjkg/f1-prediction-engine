@@ -4,7 +4,8 @@ name: F1 verified completion alert
 # Intentionally runs only reviewed code from the default branch.
 on:
   schedule:
-    - cron: "27 13 * * *"
+    - cron: "27 * * * 6,0" # Hourly during race weekends; GitHub may delay schedules
+    - cron: "27 13 * * 1-5" # One quiet weekday check
   workflow_dispatch:
   push:
     branches: [main]
