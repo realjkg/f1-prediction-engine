@@ -37,7 +37,7 @@ class AssetScripts(HTMLParser):
             return
         values = dict(attrs)
         src = values.get("src")
-        if src and re.fullmatch(r"/assets/[a-zA-Z0-9._-]+\\.js", src):
+        if src and re.fullmatch(r"/assets/[a-zA-Z0-9._-]+\.js", src):
             self.js_paths.append(src)
 
 
@@ -228,7 +228,7 @@ class Client:
             ))
             if not isinstance(items, list):
                 raise NotReady("Cannot verify existing completion notices")
-            if any(isinstance(item, dict) and SENTINEL in item.get("body", "") for item in items):
+            if any(isinstance(item, dict) and SENTINEL in (item.get("body") or "") for item in items):
                 return True
             if len(items) < 100:
                 break
@@ -281,8 +281,8 @@ def main() -> int:
             f"- **Production site:** {client.origin}\n"
             f"- **Game:** Start Challenge UI, completed races and scoring endpoint verified\n"
             f"- **Live:** OpenF1 MQTT TLS 1.3, session {year_input}/{race}, lap {proof['lap']}\n"
-            f"- **Checkpoint SHA-256:** \`{proof['checkpoint']}\`\n"
-            f"- **Forward evaluation SHA-256:** \`{proof['accuracy']}\`\n"
+            f"- **Checkpoint SHA-256:** `{proof['checkpoint']}`\n"
+            f"- **Forward evaluation SHA-256:** `{proof['accuracy']}`\n"
             "- **Model:** production qualified and promoted according to the engine contract\n\n"
             "Confirm licensing and source provenance again before externally announcing the release.\n"
         )
