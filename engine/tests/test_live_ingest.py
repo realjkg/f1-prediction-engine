@@ -245,3 +245,27 @@ def test_token_exchange_parses_the_documented_response(monkeypatch: pytest.Monke
     monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: Reply(b"{}"))
     with pytest.raises(ValueError, match="malformed"):
         fetch_access_token("me", "pw")
+
+
+def test_demo_fixture_is_synthetic_end_to_end_and_never_rebuilt(
+    predictable_dataset, tmp_path: Path,
+) -> None:
+    from f1engine.demo_live_fixture import DEMO_RACE_ID, build_demo_live_fixture
+
+    emissions = build_demo_live_fixture(tmp_path)
+    assert [e.lap for e in emissions] == list(range(2, 12))
+    assert any(e.fused for e in emissions)
+    client = TestClient(create_app(
+        ApiSettings(lap_trace_path=tmp_path / "trace.jsonl",
+                    inrace_artifact_dir=tmp_path / "artifacts"),
+        dataset=predictable_dataset,
+    ))
+    # "Latest" works for a fixture long after it was built: only licensed-live
+    # checkpoints are held to the 120-second freshness rule.
+    latest = client.get(f"/api/races/{DEMO_RACE_ID}/lap-scenario?season=2026")
+    assert latest.status_code == 200
+    assert latest.json()["sourceType"] == "synthetic-fixture"
+    assert latest.json()["lap"] == 11
+    assert client.get(f"/api/races/{DEMO_RACE_ID}/lap-fusion?season=2026").status_code == 200
+    with pytest.raises(FileExistsError):
+        build_demo_live_fixture(tmp_path)

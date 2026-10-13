@@ -64,6 +64,13 @@ model registry or MQTT subscription belongs in this runtime.
 AI Gateway: server-side credentials, operator authorization, fixed provider
 host and CA/hostname-validated TLS 1.3 minimum. No gateway usage by default.
 
+Live Lab: the image bakes in one **synthetic** race, `demo-synthetic`, built at
+image build time by streaming invented messages through the real live-ingest
+code (`scripts/build-demo-live-fixture.py`). The Live Lab opens on it
+(`VITE_LIVE_LAB_RACE`, public build value) and every checkpoint is labeled
+`synthetic-fixture`. It shows the screens and API; it is not provider data, a
+real race, or a test of the broker connection.
+
 Future live feeds: move a licensed MQTT/TLS 1.3 collector, durable event
 stream, and prospective model calibration to a separate private, stateful
 service. The public historical demo cannot claim current-race accuracy.

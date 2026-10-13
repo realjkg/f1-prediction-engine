@@ -7,16 +7,24 @@ import type { InRaceAccuracyReport, InRaceRunArtifact, UpdatedScenario } from ".
 
 const formatNumber = (value: number) => value.toFixed(1);
 
+// Build-time defaults for the Live Lab form. The container demo sets these to its
+// synthetic race so the first screen has something to show; ordinary builds
+// keep the real-race defaults. Public values only, never secrets.
+const DEFAULT_RACE = import.meta.env.VITE_LIVE_LAB_RACE?.trim() || "singapore";
+const DEFAULT_SEASON = import.meta.env.VITE_LIVE_LAB_SEASON?.trim() || "2026";
+
 /**
  * In-race Lab — reads a VERIFIED local artifact. Never synthesizes a new
  * prediction from a user's lap input, and never labels research as live.
  */
 export function LiveLabPage() {
   const client = useEngineClient();
-  const [raceInput, setRaceInput] = useState("singapore");
-  const [seasonInput, setSeasonInput] = useState("2026");
+  const [raceInput, setRaceInput] = useState(DEFAULT_RACE);
+  const [seasonInput, setSeasonInput] = useState(DEFAULT_SEASON);
   const [lapInput, setLapInput] = useState("");
-  const [query, setQuery] = useState({ raceId: "singapore", season: 2026, lap: undefined as number | undefined });
+  const [query, setQuery] = useState({
+    raceId: DEFAULT_RACE, season: Number(DEFAULT_SEASON), lap: undefined as number | undefined,
+  });
   const [tick, setTick] = useState(0);
   const [autoRefresh, setAutoRefresh] = useState(false);
 
@@ -256,7 +264,7 @@ function ScenarioDetails({ artifact }: { artifact: InRaceRunArtifact }) {
       ) : (
         <>
           <p className="screen-intro">
-            {scenario.remainingLaps} laps remaining at this checkpoint.
+            {scenario.remainingLaps} laps remaining at this checkpoint.{" "}
             {scenario.trials.toLocaleString()} deterministic conditional trials.
             Frozen as of {new Date(scenario.observedAt).toLocaleString()}.
           </p>
