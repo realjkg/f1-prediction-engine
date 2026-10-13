@@ -1,0 +1,18 @@
+# Render blueprint for the public demo: the same single image as the Vercel
+# deploy (React + read-only API + frozen evidence + synthetic Live Lab race).
+# Free plan on purpose: it sleeps after 15 idle minutes and has no disk, which
+# is fine for a demo and means it cannot run the live ingest (see
+# deploy/render/README.md). Deploys are manual so only reviewed commits ship.
+services:
+  - type: web
+    name: f1-pitwall-demo
+    runtime: docker
+    dockerfilePath: ./Dockerfile.vercel
+    plan: free
+    autoDeployTrigger: "off"
+    healthCheckPath: /healthz
+    envVars:
+      # Render terminates HTTPS at its edge, like Vercel. Explicit opt-in so the
+      # plain-HTTP server still refuses to start on an unmanaged public port.
+      - key: F1E_DEMO_MANAGED_EDGE
+        value: "1"

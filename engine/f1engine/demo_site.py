@@ -56,7 +56,11 @@ def create_unified_demo(
             "manifest-src 'self'; worker-src 'self'"
         )
         # HSTS applies to browsers at a real HTTPS edge; Vercel terminates it.
-        if request.url.scheme == "https" or os.environ.get("VERCEL") == "1":
+        if (
+            request.url.scheme == "https"
+            or os.environ.get("VERCEL") == "1"
+            or os.environ.get("F1E_DEMO_MANAGED_EDGE") == "1"
+        ):
             response.headers["Strict-Transport-Security"] = (
                 "max-age=31536000; includeSubDomains"
             )

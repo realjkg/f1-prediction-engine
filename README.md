@@ -29,7 +29,7 @@ seeds, predicts all 24 scoreable 2024 rounds, backtests against actual
 results, writes the evidence ledger, prints the fixture race briefs, then
 serves the engine API. Expect:
 
-- **Banner:** `F1 Prediction Engine v0.1.0 — REAL MODELS — PINNED DATASET 2020–2024 — NO LIVE INFERENCE`
+- **Banner:** `F1 Prediction Engine v0.1.0 — REAL MODELS — PINNED DATASET 2020–2024 — NOT LIVE` (or `LIVE` while a licensed feed is connected with a fresh checkpoint)
 - **API:** `http://127.0.0.1:8000` (docs at `/docs`, Prometheus at `/metrics`)
 - **The proof, in the log:** `backtest: 24 rounds scored — winner hit rate ensemble=0.25, m1-gbm=0.29, m2-logit=0.29, m3-form=0.21`
 

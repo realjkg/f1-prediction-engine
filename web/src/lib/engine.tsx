@@ -47,10 +47,19 @@ export function useConfigReady(): ConfigView {
 }
 
 /** The engine's evidence-basis banner text for the current config. */
-export function advisoryBasis(config: ConfigView): string {
+export function advisoryBasis(config: ConfigView, live = false): string {
+  const state = live ? "LIVE" : "NOT LIVE";
   return config.briefMode === "live"
-    ? "REAL MODELS — PINNED DATASET 2020–2024 — LIVE OLLAMA BRIEF (DIGEST-PINNED)"
-    : "REAL MODELS — PINNED DATASET 2020–2024 — NO LIVE INFERENCE";
+    ? `REAL MODELS — PINNED DATASET 2020–2024 — ${state} — LIVE OLLAMA BRIEF (DIGEST-PINNED)`
+    : `REAL MODELS — PINNED DATASET 2020–2024 — ${state}`;
+}
+
+const LiveNowContext = createContext(false);
+export const LiveNowProvider = LiveNowContext.Provider;
+
+/** True only while a licensed feed is connected with a fresh checkpoint (see lib/live.ts). */
+export function useLiveNow(): boolean {
+  return useContext(LiveNowContext);
 }
 
 export type Resource<T> =

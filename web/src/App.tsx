@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { BottomNav, ROUTES, type Route } from "./components/BottomNav";
 import { EngineErrorPanel, Loading } from "./components/EngineError";
 import { BriefPage } from "./routes/BriefPage";
@@ -13,6 +13,7 @@ import { engineClient, ApiError } from "./lib/api";
 import {
   ConfigProvider,
   EngineClientProvider,
+  LiveNowProvider,
   useConfigReady,
   useEngineClient,
   useResource,
@@ -27,6 +28,7 @@ import {
   saveRecord,
 } from "./lib/pitwall";
 import { summarizeRoundScore } from "./lib/calls";
+import { LIVE_RACE_ID, LIVE_SEASON, isLive } from "./lib/live";
 import { COMPETITORS, callForCompetitor, type RoundCompetitorScores } from "./lib/standings";
 import type {
   CallScore,
@@ -83,6 +85,24 @@ function Shell() {
   const config = useConfigReady();
   const [route, setRoute] = useState<Route>(routeFromHash);
   const [record, setRecord] = useState<PitWallRecord>(() => loadRecord(browserStorage()));
+
+  // "Live" in the header means the feed for the default race is connected with a
+  // fresh licensed checkpoint right now. Anything else, including an unreachable
+  // status endpoint, reads "Not live". The last answer is kept between polls so
+  // the label does not flicker.
+  const [liveTick, setLiveTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setLiveTick((previous) => previous + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const liveStatus = useResource(
+    () => client.getLiveStatus(LIVE_RACE_ID, Number(LIVE_SEASON)),
+    [liveTick],
+  );
+  const liveRef = useRef(false);
+  if (liveStatus.status === "ready") liveRef.current = isLive(liveStatus.data);
+  if (liveStatus.status === "error") liveRef.current = false;
+  const liveNow = liveRef.current;
 
   useEffect(() => {
     // Hash routing is a subscription to a non-React system (the URL).
@@ -182,9 +202,12 @@ function Shell() {
     <div className="app-shell">
       <header className="app-header">
         <span className="app-title">Pit Wall</span>
-        <span className="app-banner">{advisoryBasis(config)}</span>
-        <span className="app-replay-chip num">Replay of past races · dataset {config.datasetVersion}</span>
+        <span className="app-banner">{advisoryBasis(config, liveNow)}</span>
+        <span className="app-replay-chip num">
+          {liveNow ? "Live feed connected" : "Replay of past races"} · dataset {config.datasetVersion}
+        </span>
       </header>
+      <LiveNowProvider value={liveNow}>
       <main className="app-main">
         {route === "race" && <RacePage record={record} onLock={lockCall} onOpenEvidence={openEvidence} onViewStandings={() => navigate("models")} />}
         {route === "live-lab" && <LiveLabPage />}
@@ -202,6 +225,7 @@ function Shell() {
           />
         )}
       </main>
+      </LiveNowProvider>
       <BottomNav active={route} onNavigate={navigate} />
     </div>
   );

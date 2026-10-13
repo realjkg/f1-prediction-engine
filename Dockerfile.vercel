@@ -6,6 +6,8 @@ WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
+# Public build-time defaults: the Live Lab opens on the synthetic demo race.
+ENV VITE_LIVE_LAB_RACE=demo-synthetic VITE_LIVE_LAB_SEASON=2026
 RUN npm run build
 
 FROM python:3.12-slim-bookworm
@@ -18,6 +20,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     F1E_SBOM_SOURCE_ROOT=/app \
     F1E_DEMO_WEB_DIR=/app/web/dist \
     F1E_BRIEF_MODE=fixture \
+    F1E_LAP_TRACE_PATH=/app/data/demo-live/trace.jsonl \
+    F1E_INRACE_ARTIFACT_DIR=/app/data/demo-live/artifacts \
     PORT=8080
 WORKDIR /app
 COPY engine/requirements.lock.txt /app/engine/requirements.lock.txt
@@ -34,6 +38,8 @@ RUN mkdir -p /app/data/evidence /app/data/sbom \
   && python scripts/demo.py --data-dir /app/data/snapshot \
        --ledger /app/data/evidence/ledger.jsonl --season 2024 --no-serve --no-brief \
   && python -c "from f1engine.demo_site import create_unified_demo; create_unified_demo(); print('Unified site verified')"
+# Synthetic Live Lab race, streamed through the real live-ingest code at build time.
+RUN python scripts/build-demo-live-fixture.py --output /app/data/demo-live
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin f1demo \
   && chmod -R a+rX /app/data /app/web
 USER 10001:10001

@@ -24,6 +24,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from f1engine.inrace_pipeline import (
     project_and_record,
@@ -83,8 +84,11 @@ class LiveIngestor:
     trace_path: Path
     artifact_root: Path
     spool_path: Path
-    rights_evidence: str
+    rights_evidence: str | None
     prior: PreRacePrior | None = None
+    # "synthetic-fixture" is for demos and tests that stream invented data; it
+    # is stamped on every checkpoint and never needs a provider license.
+    source_type: Literal["licensed-live", "synthetic-fixture"] = "licensed-live"
     scenario_weight: float = 0.5
     trials: int = 2000
     stats: IngestStats = field(default_factory=IngestStats)
@@ -95,7 +99,7 @@ class LiveIngestor:
     _leader_laps: dict[int, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not self.rights_evidence.strip():
+        if self.source_type == "licensed-live" and not (self.rights_evidence or "").strip():
             raise ValueError("live ingest requires a recorded rights reference")
         if len(self.entrants) < 2 or len(set(self.entrants)) != len(self.entrants):
             raise ValueError("verified, unique entrant list required")
@@ -204,7 +208,7 @@ class LiveIngestor:
                 season=self.season, race_id=self.race_id, session_key=self.session_key,
                 lap=lap, total_laps=self.total_laps, cutoff=captured_at,
                 captured_at=captured_at, entrant_numbers=self.entrants,
-                source_type="licensed-live", rights_evidence=self.rights_evidence,
+                source_type=self.source_type, rights_evidence=self.rights_evidence,
                 trials=self.trials,
             )
         except LapTraceError as exc:

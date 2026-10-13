@@ -25,16 +25,22 @@ def configured_server() -> uvicorn.Config:
     key = os.environ.get("F1E_DEMO_TLS_KEY")
     if bool(cert) != bool(key):
         raise RuntimeError("both TLS certificate and private key are required")
-    managed_edge = os.environ.get("VERCEL") == "1"
+    # A managed edge terminates public HTTPS before this plain-HTTP server. Vercel
+    # is detected; any other host (Render, for example) must opt in explicitly,
+    # so a plain `docker run` on a public port still fails closed.
+    managed_edge = (
+        os.environ.get("VERCEL") == "1" or os.environ.get("F1E_DEMO_MANAGED_EDGE") == "1"
+    )
     localhost_test = os.environ.get("F1E_DEMO_LOOPBACK_ONLY") == "1"
     if not cert and not managed_edge and not localhost_test:
         raise RuntimeError(
             "TLS 1.3 required for independent hosting; "
-            "plaintext permitted only behind Vercel's managed edge "
+            "plaintext permitted only behind a managed HTTPS edge "
+            "(Vercel, or F1E_DEMO_MANAGED_EDGE=1) "
             "or when explicitly confined to local demo loopback"
         )
     if localhost_test and managed_edge:
-        raise RuntimeError("loopback test flag is not allowed on Vercel")
+        raise RuntimeError("loopback test flag is not allowed behind a managed edge")
     kwargs: dict[str, object] = {
         "factory": True,
         "host": "127.0.0.1" if localhost_test else "0.0.0.0",
