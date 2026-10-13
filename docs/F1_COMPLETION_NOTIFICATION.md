@@ -2,7 +2,7 @@
 
 This repository includes a **quiet one-time notification** mechanism. It does
 not use a ChatGPT Task or affect the ChatGPT task limit. GitHub Actions runs
-`.github/workflows/f1-completion-watch.yml` once daily and after relevant
+`.github/workflows/f1-completion-watch.yml` hourly on weekends, daily on weekdays, and after relevant
 production-branch pushes. When **every** checked release criterion succeeds,
 it creates **one GitHub issue assigned to `realjkg`**. GitHub can deliver
 notifications for assigned issues according to the account's GitHub
