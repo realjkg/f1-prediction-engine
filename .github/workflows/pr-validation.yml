@@ -25,6 +25,8 @@ jobs:
           python-version: "3.12"
       - name: Check U.S. English in authored documentation
         run: python3 scripts/check-us-english.py
+      - name: Verify F1 completion alert fail-closed gates
+        run: python3 -m unittest discover -s scripts/tests -p test_f1_completion_watch.py -v
       - name: Install engine from lock (hash-verified)
         # Locks are the source of truth (pip-compile --generate-hashes); CI never
         # re-resolves ranges, so builds are reproducible and pip-audit results are
