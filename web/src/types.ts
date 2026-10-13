@@ -566,3 +566,21 @@ export interface SupplyChainView {
   limitations: string[];
   releaseReady: false;
 }
+
+/** Private MQTT collector heartbeat + checkpoint metadata; no public provider token. */
+export interface LiveStatusView {
+  feedState: "not-configured" | "offline" | "connected" | "stale";
+  evidenceState: "none" | "replay" | "fresh-checkpoint" | "stale-checkpoint";
+  inferenceState: "unavailable" | "conditional-research";
+  season: number;
+  raceId: string;
+  broker: "openf1";
+  lastMessageAt: string | null;
+  lastCheckpointAt: string | null;
+  lap: number | null;
+  totalLaps: number | null;
+  sourceType: "licensed-live" | "historical-archive" | "synthetic-fixture" | null;
+  checkpointSha256: string | null;
+  qualifiedForProduction: false;
+  modelPromoted: false;
+}

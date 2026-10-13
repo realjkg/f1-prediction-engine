@@ -1,0 +1,41 @@
+# Overlay on compose.tls.yaml; private persistent OpenF1 MQTT ingestion.
+# Usage: docker compose -f compose.tls.yaml -f compose.live.yaml up -d --build
+# The collector has no host ports. The engine holds historical replay + read APIs.
+services:
+  engine:
+    environment:
+      F1E_LAP_TRACE_PATH: /app/data/live/trace.jsonl
+      F1E_INRACE_ARTIFACT_DIR: /app/data/live/artifacts
+      F1E_LIVE_HEARTBEAT_PATH: /app/data/live/heartbeat.json
+    volumes:
+      - live:/app/data/live:ro
+  live-collector:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.live-collector
+    environment:
+      OPENF1_USER: "${OPENF1_USER:?Licensed provider username required}"
+      OPENF1_PASSWORD_FILE: /run/secrets/openf1_password
+      F1E_LIVE_SESSION_KEY: "${F1E_LIVE_SESSION_KEY:?Verified session key required}"
+      F1E_LIVE_SEASON: "${F1E_LIVE_SEASON:?Race season required}"
+      F1E_LIVE_RACE_ID: "${F1E_LIVE_RACE_ID:?Race slug required}"
+      F1E_LIVE_TOTAL_LAPS: "${F1E_LIVE_TOTAL_LAPS:?Verified race distance required}"
+      F1E_LIVE_ENTRANTS: "${F1E_LIVE_ENTRANTS:?Verified full entrant roster required}"
+      F1E_OPENF1_RIGHTS_REF: "${F1E_OPENF1_RIGHTS_REF:?Provider rights reference required}"
+      F1E_LIVE_PRIOR_FILE: "${F1E_LIVE_PRIOR_FILE:-}"
+    secrets:
+      - openf1_password
+    volumes:
+      - live:/app/data/live
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+secrets:
+  openf1_password:
+    file: "${F1E_OPENF1_PASSWORD_FILE:?Path to provider credentials secret file required}"
+volumes:
+  live:

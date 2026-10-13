@@ -44,6 +44,7 @@ function errorHeadline(error: ApiError): string {
     case "LAP_TRACE_TAMPERED":
     case "ARTIFACT_TAMPERED":
     case "ACCURACY_REPORT_TAMPERED":
+    case "LIVE_STATUS_INVALID":
       return "The in-race evidence failed integrity or source validation.";
     case "CLAUDE_UNAVAILABLE":
       return "The optional Claude narrative is disabled or unavailable.";

@@ -1,0 +1,22 @@
+.game-hub__card{padding:1rem;background:var(--color-surface);border:1px solid var(--color-border);border-radius:18px;margin-bottom:1.4rem}
+.game-hub__heading{display:flex;gap:.6rem;justify-content:space-between;align-items:flex-start}
+.game-hub__eyebrow{font-size:.61rem;font-weight:850;color:var(--color-accent);letter-spacing:.095em;margin:.1rem 0 .5rem}
+.game-hub__heading h1{font-size:1.5rem;line-height:1.13;letter-spacing:-.025em;margin:0 0 .6rem}
+.game-hub__subhead{color:var(--color-text-muted);line-height:1.5;font-size:.82rem;margin:0}
+.game-hub__level{font-size:.62rem;white-space:nowrap;font-weight:800;background:var(--color-accent-dim);color:var(--color-accent);padding:.45rem .55rem;border-radius:999px}
+.game-hub__how{padding:0;list-style:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.45rem;margin:1.2rem 0}
+.game-hub__how li{font-size:.7rem;line-height:1.35;padding:.6rem .4rem;text-align:center;border:1px solid var(--color-border);background:var(--color-surface-raised);border-radius:10px}
+.game-hub__how li span{display:block;font-weight:900;font-size:1.05rem;color:var(--color-accent);margin-bottom:.25rem}
+.game-hub__scoreboard{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.4rem}
+.game-hub__scoreboard>div{display:flex;flex-direction:column;gap:.23rem;text-align:center;background:var(--color-bg);padding:.8rem .2rem;border:1px solid var(--color-border);border-radius:10px}
+.game-hub__scoreboard strong{font-size:1.35rem;font-variant-numeric:tabular-nums}
+.game-hub__scoreboard span{font-size:.65rem;color:var(--color-text-muted)}
+.game-hub__mission{margin:1rem 0;padding:.7rem .8rem;border-radius:11px;border:1px solid var(--color-border)}
+.game-hub__mission-head{display:flex;align-items:center;justify-content:space-between;font-size:.76rem;font-weight:750;gap:.3rem}
+.game-hub__mission progress{width:100%;height:.7rem;accent-color:var(--color-accent);margin:.6rem 0 .2rem}
+.game-hub__mission p{font-size:.72rem;line-height:1.45;color:var(--color-text-muted);margin:0}
+.game-hub__play{width:100%;text-align:center;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.55rem;letter-spacing:.045em;font-size:1rem}
+.game-hub__play small{flex-basis:100%;font-size:.67rem;letter-spacing:0;font-weight:600}
+.game-hub__standings{width:100%;margin-top:.55rem;font-size:.79rem}
+.game-hub__complete{padding:.8rem;background:var(--color-surface-raised);border-radius:8px;line-height:1.4;color:var(--color-text-muted);font-size:.8rem}
+@media(max-width:390px){.game-hub__heading{flex-wrap:wrap}.game-hub__how{grid-template-columns:1fr}.game-hub__how li{text-align:left}.game-hub__how li span{display:inline;margin-right:.6rem}}

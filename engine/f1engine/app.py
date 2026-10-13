@@ -74,6 +74,7 @@ from f1engine.inrace_pipeline import (
 from f1engine.inrace_walkforward import read_forward_report
 from f1engine.lap_trace import LapTraceError, LapTraceRecord, get_lap_observation
 from f1engine.live_prior import UpdatedScenario
+from f1engine.live_status import LiveStatusInvalid, LiveStatusView, live_status
 from f1engine.observability import EventStatus, Signal
 from f1engine.scoring import CallScore, PitCall, score_call_sheet
 from f1engine.supply_chain import SupplyChainError, SupplyChainView, read_supply_chain
@@ -110,6 +111,7 @@ class ApiSettings:
     ledger_path: Path = Path(DEFAULT_LEDGER_PATH)
     lap_trace_path: Path | None = None
     inrace_artifact_dir: Path | None = None
+    live_heartbeat_path: Path | None = None
     sbom_path: Path = Path("data/sbom/f1-sbom.cdx.json")
     sbom_source_root: Path = Path(".")
     inrace_accuracy_report: Path | None = None
@@ -133,6 +135,8 @@ class ApiSettings:
             if environ.get("F1E_LAP_TRACE_PATH") else None,
             inrace_artifact_dir=Path(environ["F1E_INRACE_ARTIFACT_DIR"])
             if environ.get("F1E_INRACE_ARTIFACT_DIR") else None,
+            live_heartbeat_path=Path(environ["F1E_LIVE_HEARTBEAT_PATH"])
+            if environ.get("F1E_LIVE_HEARTBEAT_PATH") else None,
             inrace_accuracy_report=Path(environ["F1E_INRACE_ACCURACY_REPORT"])
             if environ.get("F1E_INRACE_ACCURACY_REPORT") else None,
             sbom_path=Path(environ.get("F1E_SBOM_PATH", "data/sbom/f1-sbom.cdx.json")),
@@ -634,6 +638,22 @@ def create_app(
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         return {"status": "ok", "version": APP_VERSION}
+
+    @app.get("/api/live/status")
+    def live_runtime_status(
+        season: Annotated[int, Query(ge=1950, le=2100)],
+        race_id: Annotated[str, Query(pattern=r"^[a-z0-9_-]{1,100}$")],
+    ) -> LiveStatusView:
+        """Read verified collector status and recorded lap inference, not mock live data."""
+        try:
+            return live_status(
+                season=season, race_id=race_id,
+                trace_path=resolved.lap_trace_path,
+                artifact_root=resolved.inrace_artifact_dir,
+                heartbeat_path=resolved.live_heartbeat_path,
+            )
+        except (LiveStatusInvalid, LapTraceError, ArtifactTampered) as error:
+            raise _error(503, "LIVE_STATUS_INVALID", str(error)) from error
 
     @app.get("/metrics")
     def metrics_endpoint() -> Response:

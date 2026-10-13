@@ -186,7 +186,7 @@ function Shell() {
         <span className="app-replay-chip num">Replay of past races · dataset {config.datasetVersion}</span>
       </header>
       <main className="app-main">
-        {route === "race" && <RacePage record={record} onLock={lockCall} onOpenEvidence={openEvidence} />}
+        {route === "race" && <RacePage record={record} onLock={lockCall} onOpenEvidence={openEvidence} onViewStandings={() => navigate("models")} />}
         {route === "live-lab" && <LiveLabPage />}
         {route === "models" && <ModelsPage record={record} />}
         {route === "evidence" && <EvidencePage onView={countEvidenceView} />}

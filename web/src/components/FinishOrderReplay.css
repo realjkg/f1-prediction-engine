@@ -1,0 +1,17 @@
+.finish-order{border:1px solid var(--color-border);background:var(--color-surface);border-radius:12px;padding:.8rem;margin:1rem 0}
+.finish-order__heading{display:flex;justify-content:space-between;align-items:center;gap:.6rem}.finish-order__heading h2{margin:0}
+.finish-order__heading button{font-size:.73rem;padding:.4rem .55rem}
+.finish-order__help{font-size:.72rem;line-height:1.45;color:var(--color-text-muted)}
+.finish-order__scene{position:relative;background:#1c2630;border:3px solid #44515e;border-radius:9px;overflow:hidden;padding:6px 0}
+.finish-order__lane{height:57px;position:relative;display:flex;align-items:center;border-bottom:1px dashed rgb(255 255 255 / .23);color:#e7eef7}
+.finish-order__lane:last-of-type{border-bottom:0}
+.finish-order__lane--1 .finish-order__moving-car{color:#f7bb48}.finish-order__lane--2 .finish-order__moving-car{color:#41d2c2}.finish-order__lane--3 .finish-order__moving-car{color:#fc5664}
+.finish-order__place{position:absolute;z-index:2;left:.5rem;color:#edf4fa;font-size:.7rem;font-weight:850}
+.finish-order__moving-car{position:absolute;left:10%;top:10px;width:76px;z-index:1;animation:finish-order-drive ease-out both}
+.finish-order__moving-car svg{width:100%;display:block;filter:drop-shadow(0 2px 2px #000)}
+.finish-order__label{position:absolute;z-index:2;right:.5rem;top:4px;font-size:.65rem;font-weight:850;color:#f5f7fa;text-shadow:0 1px 3px #0b0e10}
+.finish-order__label small{font-size:.6rem;font-weight:600}
+.finish-order__line{position:absolute;top:0;bottom:0;right:18%;width:10px;background:conic-gradient(#f9fafb 25%,#12181d 0 50%,#f9fafb 0 75%,#12181d 0) 0 0/10px 10px;opacity:.6}
+@keyframes finish-order-drive{0%{left:10%;transform:scale(.9)}100%{left:calc(82% - 76px);transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.finish-order__moving-car{animation:none;left:calc(82% - 76px)}}
+@media(max-width:365px){.finish-order__label small{display:none}}
