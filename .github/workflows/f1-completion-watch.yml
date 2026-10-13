@@ -1,0 +1,51 @@
+name: F1 verified completion alert
+
+# Repository-based watch; does not create or consume a ChatGPT Task.
+# Intentionally runs only reviewed code from the default branch.
+on:
+  schedule:
+    - cron: "27 13 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/f1-completion-watch.yml"
+      - "scripts/f1-completion-watch.py"
+      - "scripts/tests/test_f1_completion_watch.py"
+      - "engine/f1engine/**"
+      - "web/src/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f1-completion-notification
+  cancel-in-progress: false
+
+jobs:
+  verify-and-notify:
+    name: Verify release; notify by assigned GitHub Issue once
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      F1_PITWALL_ORIGIN: ${{ vars.F1_PITWALL_ORIGIN || 'https://f1-pitwall-demo.vercel.app' }}
+      F1_LIVE_SEASON: ${{ vars.F1_LIVE_SEASON }}
+      F1_LIVE_RACE_ID: ${{ vars.F1_LIVE_RACE_ID }}
+      F1_OPENF1_PUBLIC_RIGHTS_APPROVED: ${{ vars.F1_OPENF1_PUBLIC_RIGHTS_APPROVED }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - name: Checkout reviewed release watcher
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Unit tests for fail-closed verification
+        run: python -m unittest discover -s scripts/tests -p test_f1_completion_watch.py -v
+
+      - name: Check live production and create a one-time completion notice
+        run: python scripts/f1-completion-watch.py
