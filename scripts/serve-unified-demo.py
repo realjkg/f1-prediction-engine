@@ -46,6 +46,9 @@ def configured_server() -> uvicorn.Config:
         "host": "127.0.0.1" if localhost_test else "0.0.0.0",
         "port": port,
         "workers": 1,
+        # Access logs carry client IP addresses; aggregate /metrics counters
+        # are the only request telemetry kept.
+        "access_log": False,
     }
     if cert:
         if not ssl.HAS_TLSv1_3:

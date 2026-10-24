@@ -27,4 +27,4 @@ fi
 # Explicitly local/demo-only plaintext mode: secure Compose always sets
 # F1E_REQUIRE_TLS=1 and is the only permitted production deployment.
 exec python -m uvicorn f1engine.app:create_app \
-  --factory --host 0.0.0.0 --port 8000 --workers 1
+  --factory --host 0.0.0.0 --port 8000 --workers 1 --no-access-log

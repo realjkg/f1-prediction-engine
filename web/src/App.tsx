@@ -7,6 +7,9 @@ import { ModelsPage } from "./routes/ModelsPage";
 import { ObservabilityPage } from "./routes/ObservabilityPage";
 import { RacePage } from "./routes/RacePage";
 import { LiveLabPage } from "./routes/LiveLabPage";
+import { AboutPage } from "./routes/AboutPage";
+import { ComparePage } from "./routes/ComparePage";
+import { PredictionsPage, type RaceSelection } from "./routes/PredictionsPage";
 import { SettingsPage } from "./routes/SettingsPage";
 import { SupplyChainPage } from "./routes/SupplyChainPage";
 import { engineClient, ApiError } from "./lib/api";
@@ -21,11 +24,9 @@ import {
 } from "./lib/engine";
 import {
   applyLockedRound,
-  browserStorage,
-  clearRecord,
   emptyRecord,
-  loadRecord,
-  saveRecord,
+  legacyStorage,
+  purgeLegacyStorage,
 } from "./lib/pitwall";
 import { summarizeRoundScore } from "./lib/calls";
 import { LIVE_RACE_ID, LIVE_SEASON, isLive } from "./lib/live";
@@ -43,7 +44,7 @@ import { raceKeyOf } from "./types";
 
 function routeFromHash(): Route {
   const candidate = window.location.hash.replace(/^#\/?/, "");
-  return (ROUTES as readonly string[]).includes(candidate) ? (candidate as Route) : "race";
+  return (ROUTES as readonly string[]).includes(candidate) ? (candidate as Route) : "predict";
 }
 
 export default function App() {
@@ -84,7 +85,14 @@ function Shell() {
   const client = useEngineClient();
   const config = useConfigReady();
   const [route, setRoute] = useState<Route>(routeFromHash);
-  const [record, setRecord] = useState<PitWallRecord>(() => loadRecord(browserStorage()));
+  // Game state lives in memory for this visit only; nothing about the player is
+  // written to browser storage. Remove what earlier builds stored, once.
+  const [record, setRecord] = useState<PitWallRecord>(emptyRecord);
+  // The race being viewed on Predictions and Compare; memory only, like the record.
+  const [selection, setSelection] = useState<RaceSelection | null>(null);
+  useEffect(() => {
+    purgeLegacyStorage(legacyStorage());
+  }, []);
 
   // "Live" in the header means the feed for the default race is connected with a
   // fresh licensed checkpoint right now. Anything else, including an unreachable
@@ -154,7 +162,6 @@ function Shell() {
       }
 
       const next = applyLockedRound(record, raceKey, call, scores, playerScore, predictionRecord);
-      saveRecord(browserStorage(), next);
       const badgesEarned = next.badges.filter((badge) => !record.badges.includes(badge));
       setRecord(next);
       return { score: playerScore, badgesEarned };
@@ -162,24 +169,14 @@ function Shell() {
     [client, record],
   );
 
-  const setProfileName = useCallback((profileName: string) => {
-    setRecord((current) => {
-      const next = { ...current, profileName };
-      saveRecord(browserStorage(), next);
-      return next;
-    });
-  }, []);
-
   const setFreshEyes = useCallback((freshEyes: boolean) => {
     setRecord((current) => {
       const next = { ...current, freshEyes };
-      saveRecord(browserStorage(), next);
       return next;
     });
   }, []);
 
   const resetRecord = useCallback(() => {
-    clearRecord(browserStorage());
     setRecord(emptyRecord());
   }, []);
 
@@ -193,7 +190,6 @@ function Shell() {
   const countEvidenceView = useCallback(() => {
     setRecord((current) => {
       const next = { ...current, evidenceViews: current.evidenceViews + 1 };
-      saveRecord(browserStorage(), next);
       return next;
     });
   }, []);
@@ -209,6 +205,11 @@ function Shell() {
       </header>
       <LiveNowProvider value={liveNow}>
       <main className="app-main">
+        {route === "predict" && (
+          <PredictionsPage selection={selection} onSelect={setSelection} onCompare={() => navigate("compare")} />
+        )}
+        {route === "compare" && <ComparePage selection={selection} onSelect={setSelection} />}
+        {route === "about" && <AboutPage />}
         {route === "race" && <RacePage record={record} onLock={lockCall} onOpenEvidence={openEvidence} onViewStandings={() => navigate("models")} />}
         {route === "live-lab" && <LiveLabPage />}
         {route === "models" && <ModelsPage record={record} />}
@@ -219,7 +220,6 @@ function Shell() {
         {route === "settings" && (
           <SettingsPage
             record={record}
-            onProfileName={setProfileName}
             onFreshEyes={setFreshEyes}
             onReset={resetRecord}
           />

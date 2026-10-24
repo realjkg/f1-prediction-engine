@@ -33,6 +33,11 @@ import type {
   SupplyChainView,
   ClaudeBriefView,
   LiveStatusView,
+  Checkpoint,
+  DataQualityReport,
+  ModelEvaluationView,
+  PredictionCatalogView,
+  PredictionEnvelope,
 } from "../types";
 
 /**
@@ -68,6 +73,10 @@ export type EngineErrorCode =
   | "CLAUDE_REQUEST_INVALID"
   | "CLAUDE_EVIDENCE_INVALID"
   | "CLAUDE_EVIDENCE_MISSING"
+  | "CHECKPOINT_UNSUPPORTED"
+  | "PREDICTION_UNAVAILABLE"
+  | "EVALUATION_UNAVAILABLE"
+  | "NOT_READY"
   // client (this module)
   | "ENGINE_UNREACHABLE"
   | "RESPONSE_INVALID"
@@ -167,6 +176,10 @@ const ERROR_CODES = new Set<EngineErrorCode>([
   "CLAUDE_REQUEST_INVALID",
   "CLAUDE_EVIDENCE_INVALID",
   "CLAUDE_EVIDENCE_MISSING",
+  "CHECKPOINT_UNSUPPORTED",
+  "PREDICTION_UNAVAILABLE",
+  "EVALUATION_UNAVAILABLE",
+  "NOT_READY",
   "ENGINE_UNREACHABLE",
   "RESPONSE_INVALID",
   "RESPONSE_NOT_OK",
@@ -187,6 +200,11 @@ export interface EngineClient {
   /** Season-qualified — snapshot race ids repeat across seasons. */
   getPredictions(raceId: string, season: number): Promise<PredictionsView>;
   getRaceResult(raceId: string, season: number): Promise<RaceResultView>;
+  /** Every race with its prediction mode and supported checkpoints. */
+  getPredictionCatalog(): Promise<PredictionCatalogView>;
+  getRacePrediction(raceId: string, season: number, checkpoint: Checkpoint): Promise<PredictionEnvelope>;
+  getModelEvaluation(): Promise<ModelEvaluationView>;
+  getDataQuality(): Promise<DataQualityReport>;
   getLapScenario(raceId: string, season: number, lap?: number): Promise<InRaceRunArtifact>;
   getLapFusion(raceId: string, season: number, lap?: number): Promise<UpdatedScenario>;
   getInraceAccuracy(): Promise<InRaceAccuracyReport>;
@@ -343,6 +361,18 @@ export function createEngineClient(
         `/api/races/${encodeURIComponent(raceId)}/result?${seasonQuery(season)}`,
         ["raceId", "classified"],
       ),
+    getPredictionCatalog: () =>
+      getJson<PredictionCatalogView>("/api/prediction-catalog", ["races", "supportedTotal", "upcomingNote"]),
+    getRacePrediction: (raceId, season, checkpoint) =>
+      getJson<PredictionEnvelope>(
+        `/api/races/${encodeURIComponent(raceId)}/prediction?${seasonQuery(season)}` +
+          `&checkpoint=${encodeURIComponent(checkpoint)}`,
+        ["predictionMode", "checkpoint", "drivers", "featureCutoff", "outputs", "validation"],
+      ),
+    getModelEvaluation: () =>
+      getJson<ModelEvaluationView>("/api/model-evaluation", ["scores", "baseline", "calibration", "rounds"]),
+    getDataQuality: () =>
+      getJson<DataQualityReport>("/api/data-quality", ["findings", "coverage", "inferenceBlocked"]),
     getRaceScore: (raceId, call, streakBefore, season) =>
       getJson<CallScore>(
         `/api/races/${encodeURIComponent(raceId)}/score?call=${call.join(",")}` +

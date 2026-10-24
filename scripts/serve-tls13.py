@@ -33,6 +33,9 @@ def secure_config() -> uvicorn.Config:
         host="0.0.0.0",
         port=8000,
         workers=1,
+        # Access logs carry client IP addresses; aggregate /metrics counters
+        # are the only request telemetry kept.
+        access_log=False,
         ssl_certfile=str(paths[0]),
         ssl_keyfile=str(paths[1]),
         ssl_ca_certs=str(paths[2]),

@@ -362,8 +362,8 @@ export interface BacktestMetrics {
 }
 
 /**
- * Pit Wall game state — client-owned, localStorage-backed (design doc §7,
- * no accounts in Milestone 1). Not an engine wire type.
+ * Pit Wall game state — client-owned and memory-only: it resets on reload and
+ * is never written to browser storage (no accounts). Not an engine wire type.
  */
 
 /** The player's locked podium call, by driver id. Scored only by the engine. */
@@ -417,8 +417,7 @@ export interface LockOutcome {
 
 /** The pit-wall record: the player's local game state. */
 export interface PitWallRecord {
-  profileName: string;
-  /** Locked calls by season-qualified race key (raceKeyOf) — the localStorage identity binding. */
+  /** Locked calls by season-qualified race key (raceKeyOf). */
   calls: Record<RaceKey, RoundCall>;
   /**
    * Engine-computed round scores by race key, per competitor — the standings
@@ -583,4 +582,202 @@ export interface LiveStatusView {
   checkpointSha256: string | null;
   qualifiedForProduction: false;
   modelPromoted: false;
+}
+
+/* ------------------------------------------------------------------ *
+ * Pre-race prediction contracts — engine/f1engine/prediction_api.py
+ * and data_quality.py. Field names mirror the engine's camelCase wire.
+ * ------------------------------------------------------------------ */
+
+export type Checkpoint = "pre-weekend" | "post-qualifying";
+export type PredictionMode = "historical-backtest" | "pre-race" | "unavailable";
+
+export interface CheckpointSupport {
+  checkpoint: Checkpoint;
+  supported: boolean;
+  reason: string | null;
+}
+
+export interface CatalogRace {
+  raceId: string;
+  season: number;
+  round: number;
+  name: string;
+  raceDate: string;
+  circuitName: string;
+  country: string;
+  status: "completed" | "upcoming";
+  predictionMode: PredictionMode;
+  checkpoints: CheckpointSupport[];
+}
+
+export interface PredictionCatalogView {
+  races: CatalogRace[];
+  total: number;
+  supportedTotal: number;
+  datasetId: string;
+  datasetDigest: string;
+  dataThroughDate: string;
+  upcomingRaces: number;
+  upcomingNote: string;
+  advisoryOnly: true;
+}
+
+export interface FeatureCutoff {
+  throughSeason: number | null;
+  throughRound: number | null;
+  throughRaceName: string | null;
+  throughRaceDate: string | null;
+  excludes: string[];
+}
+
+export interface DriverForecast {
+  driverId: string;
+  driverName: string;
+  driverCode: string;
+  constructorId: string;
+  constructorName: string;
+  rank: number;
+  winProbability: number;
+  perModelWinProbability: Record<string, number>;
+  features: Record<string, number | null>;
+  reasons: string[];
+}
+
+export type PredictionOutput = "winner" | "podium" | "points" | "finishPosition" | "dnfRisk" | "intervals";
+
+export interface OutputSupport {
+  output: PredictionOutput;
+  supported: boolean;
+  reason: string;
+}
+
+export interface MissingInput {
+  input: string;
+  status: "not-used-by-model" | "not-in-dataset";
+  detail: string;
+  sourceNeeded: string;
+}
+
+export interface ValidationCheck {
+  check: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface SourceRef {
+  provider: string;
+  role: string;
+  fetchedAt: string | null;
+  license: string;
+}
+
+export interface PredictionEnvelope {
+  raceId: string;
+  season: number;
+  round: number;
+  raceName: string;
+  raceDate: string;
+  circuitName: string;
+  country: string;
+  session: "race";
+  predictionMode: "historical-backtest";
+  checkpoint: Checkpoint;
+  /** Null when the original forecast moment was not recorded (replays). */
+  predictionGeneratedAt: string | null;
+  /** Deterministic evidence identifier time — not a wall-clock forecast time. */
+  evidenceGeneratedAt: string;
+  featureCutoff: FeatureCutoff;
+  sourceUpdatedAt: string;
+  fetchedAt: string;
+  freshness: "historical";
+  freshnessNote: string;
+  modelRevision: string;
+  models: string[];
+  datasetId: string;
+  datasetDigest: string;
+  evidencePredictionId: string;
+  provenance: SourceRef[];
+  outputs: OutputSupport[];
+  drivers: DriverForecast[];
+  /** Plain-language label per model input, keyed like DriverForecast.features. */
+  featureLabels: Record<string, string>;
+  consensusFlag: string;
+  baseline: { name: string; winProbability: number; detail: string };
+  missingInputs: MissingInput[];
+  limitations: string[];
+  validation: ValidationCheck[];
+  outcomeAvailable: boolean;
+  advisoryOnly: true;
+}
+
+export interface MetricEstimate {
+  value: number;
+  ciLow: number;
+  ciHigh: number;
+}
+
+export interface ModelScore {
+  modelId: string;
+  rounds: number;
+  winnerHitRate: MetricEstimate;
+  winnerLogLoss: MetricEstimate;
+  winnerBrier: MetricEstimate;
+  meanProbabilityOnWinner: number;
+}
+
+export interface CalibrationBin {
+  lower: number;
+  upper: number;
+  predictions: number;
+  meanPredicted: number | null;
+  observedWinRate: number | null;
+}
+
+export interface ModelEvaluationView {
+  cohort: string;
+  method: string;
+  rounds: number;
+  season: number | null;
+  scores: ModelScore[];
+  baseline: ModelScore;
+  calibrationModel: string;
+  calibration: CalibrationBin[];
+  calibrationVerdict: string;
+  caveats: string[];
+  bootstrapResamples: number;
+  bootstrapSeed: number;
+  advisoryOnly: true;
+}
+
+export interface QualityFinding {
+  check: string;
+  severity: "info" | "warning" | "error";
+  passed: boolean;
+  affected: number;
+  detail: string;
+  examples: string[];
+  blocksTraining: boolean;
+  blocksInference: boolean;
+}
+
+export interface SeasonCoverage {
+  season: number;
+  races: number;
+  roundsWithResults: number;
+  roundsWithQualifying: number;
+  predictionRecords: number;
+}
+
+export interface DataQualityReport {
+  datasetId: string;
+  datasetDigest: string;
+  sourceUpdatedAt: string;
+  checkedAt: string;
+  sourceAgeDays: number;
+  coverage: SeasonCoverage[];
+  findings: QualityFinding[];
+  trainingBlocked: boolean;
+  inferenceBlocked: boolean;
+  summary: string;
 }

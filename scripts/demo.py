@@ -216,7 +216,9 @@ def serve(
     settings = ApiSettings.from_env()
     if data_dir is not None:
         settings = replace(settings, data_dir=data_dir)
-    uvicorn.run(create_app(settings), host=host, port=port, log_level="warning")
+    uvicorn.run(
+        create_app(settings), host=host, port=port, log_level="warning", access_log=False,
+    )
 
 
 def run_demo(

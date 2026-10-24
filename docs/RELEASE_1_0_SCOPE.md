@@ -14,10 +14,11 @@ profiles, direct messaging, advertising, location targeting or behavioral
 tracking should be introduced into this product without a separate
 privacy and safety review.
 
-Choose a **nickname**, not a real name. Current app preferences are stored
-locally on the device. Do not ask a child for a birthdate, government ID,
+There are no nicknames, profiles or accounts. Game choices and preferences
+live only in the page's memory and reset on reload (see
+[PRIVACY.md](PRIVACY.md)). Do not ask a child for a birthdate, government ID,
 address, precise location or payment information to unlock this free game.
-An accessible reset action should erase local choices. All content and
+An accessible reset action clears this visit's choices. All content and
 language should remain suitable for school-age users.
 
 This statement is a product requirement, **not a certification** of COPPA,

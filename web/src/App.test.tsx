@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import App from "./App";
 import { installMockEngine, type MockEngine } from "./test/mockEngine";
 
-const TAB_LABELS = ["Race", "Live Lab", "Models", "Evidence", "Brief", "Observability", "Inventory", "Settings"];
+const TAB_LABELS = [
+  "Predictions", "Compare", "Performance", "Data & Evidence", "About",
+  "Live Lab", "Rewind", "Brief", "Observability", "Inventory", "Settings",
+];
 
 describe("App shell (engine-backed)", () => {
   let engine: MockEngine;
@@ -15,11 +18,18 @@ describe("App shell (engine-backed)", () => {
 
   beforeEach(() => {
     window.localStorage.clear();
-    window.location.hash = "";
+    window.location.hash = "#/race";
     engine = installMockEngine();
   });
 
-  it("renders the eight-tab bottom navigation with the round picker as the default route", async () => {
+  it("opens on Race Predictions when no route is given", async () => {
+    window.location.hash = "";
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Race predictions", level: 1 })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Predictions" }).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("renders the primary and secondary navigation and the Rewind game", async () => {
     render(<App />);
     const tabs = await waitFor(() => within(screen.getByRole("navigation")).getAllByRole("button"));
     expect(tabs.map((tab) => tab.textContent)).toEqual(TAB_LABELS);
@@ -44,7 +54,7 @@ describe("App shell (engine-backed)", () => {
   it("switches panels when a tab is pressed", async () => {
     render(<App />);
     await screen.findByRole("heading", { name: "Pick a round" });
-    fireEvent.click(screen.getByRole("button", { name: "Models" }));
+    fireEvent.click(screen.getByRole("button", { name: "Performance" }));
     expect(screen.getByRole("heading", { name: "Model Gauntlet" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Pick a round" })).toBeNull();
   });

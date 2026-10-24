@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import App from "./App";
 import { installMockEngine, type MockEngine } from "./test/mockEngine";
@@ -37,7 +37,7 @@ describe("Race Rewind flow (engine-scored)", () => {
 
   beforeEach(() => {
     window.localStorage.clear();
-    window.location.hash = "";
+    window.location.hash = "#/race";
     engine = installMockEngine();
   });
 
@@ -78,26 +78,27 @@ describe("Race Rewind flow (engine-scored)", () => {
     expect(document.querySelector(".call-sheet-timer")).not.toBeNull();
   });
 
-  it("persists the pit-wall record across a simulated reload", async () => {
+  it("keeps the pit-wall record in memory only: nothing stored, and a reload starts fresh", async () => {
+    window.localStorage.setItem("unrelated-key", "keep");
     const first = render(<App />);
     await playBahrainPerfect();
-    const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}");
-    expect(stored.streak).toBe(1);
-    expect(Object.keys(stored.roundScores)).toEqual(["2024-r1-bahrain-gp"]);
+    // Nothing about the player reached browser storage.
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(Object.keys(window.localStorage)).toEqual(["unrelated-key"]);
+    expect(Object.keys(window.sessionStorage)).toEqual([]);
     first.unmount();
 
-    // "Reload": a fresh App instance over the same storage and mock engine.
+    // "Reload": a fresh App instance starts with an empty record.
     render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Rewind" }));
     await screen.findByRole("heading", { name: "Pick a round" });
-    expect(screen.getByText("PLAYED")).toBeTruthy();
+    expect(screen.queryByText("PLAYED")).toBeNull();
+  });
 
-    // The Gauntlet shows the player's points from the stored engine summaries.
-    fireEvent.click(screen.getByRole("button", { name: "Models" }));
-    const table = await screen.findByRole("table");
-    expect(within(table).getByText("m1-gbm")).toBeTruthy();
-    expect(within(table).getByText("Ensemble")).toBeTruthy();
-    const youRow = table.querySelector("tr.is-you");
-    expect(youRow?.textContent).toContain("18");
+  it("removes a record stored by an earlier build on startup", async () => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ profileName: "KG", streak: 4 }));
+    render(<App />);
+    await waitFor(() => expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull());
   });
 
   it("hides played rounds when Fresh Eyes is on", async () => {
@@ -108,7 +109,7 @@ describe("Race Rewind flow (engine-scored)", () => {
     const toggle = await screen.findByLabelText(/Fresh Eyes/i);
     fireEvent.click(toggle);
 
-    fireEvent.click(screen.getByRole("button", { name: "Race" }));
+    fireEvent.click(screen.getByRole("button", { name: "Rewind" }));
     expect(await screen.findByRole("heading", { name: "Pick a round" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Bahrain Grand Prix/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Saudi Arabian Grand Prix/ })).toBeTruthy();
@@ -140,16 +141,16 @@ describe("Model Gauntlet (engine-backed)", () => {
 
   beforeEach(() => {
     window.localStorage.clear();
-    window.location.hash = "";
+    window.location.hash = "#/race";
     engine = installMockEngine();
   });
 
   it("renders You plus four competitors from stored engine scores once a round is played", async () => {
     render(<App />);
     await playBahrainPerfect();
-    fireEvent.click(screen.getByRole("button", { name: "Models" }));
+    fireEvent.click(screen.getByRole("button", { name: "Performance" }));
 
-    const table = await screen.findByRole("table");
+    const table = await screen.findByRole("table", { name: "Rewind standings" });
     for (const name of ["You", "m1-gbm", "m2-logit", "m3-form", "Ensemble"]) {
       expect(within(table).getByText(name)).toBeTruthy();
     }
@@ -159,7 +160,7 @@ describe("Model Gauntlet (engine-backed)", () => {
 
   it("renders the measured backtest from the served ledger", async () => {
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "Models" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Performance" }));
     const panel = await screen.findByRole("region", { name: "Backtest accuracy" });
     // Numbers come from the BacktestRecord in /api/evidence — never invented.
     // Shown as a fraction of rounds, with the percentage as a footnote.
@@ -169,7 +170,7 @@ describe("Model Gauntlet (engine-backed)", () => {
 
   it("shows a blind-guess baseline under the backtest so the numbers have a reference", async () => {
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "Models" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Performance" }));
     const panel = await screen.findByRole("region", { name: "Backtest accuracy" });
     const baseline = within(panel).getByText("Blind guess").closest("tr");
     expect(baseline).toBeTruthy();
@@ -179,7 +180,7 @@ describe("Model Gauntlet (engine-backed)", () => {
 
   it("shows the empty state before any round is played", async () => {
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "Models" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Performance" }));
     expect(await screen.findByText(/No rounds played yet/)).toBeTruthy();
   });
 });
