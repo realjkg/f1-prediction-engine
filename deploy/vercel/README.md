@@ -104,10 +104,14 @@ misconfigured target and risk a partial service.
   Ignored Build Step configured to **skip all builds**. Preview generation
   disabled. Retain their prior failed logs for incident evidence, but do
   not redeploy/reanimate these duplicates as separate FastAPI apps.
-- Other pre-existing F1 preview projects may deploy successfully but
-  are not declared the authoritative complete game. Inventory them
-  before deleting or changing them; do not silently expand the
-  production-release surface.
+- `f1-prediction-engine-k469`, `f1-prediction-engine-n3sd` and
+  `f1-prediction-engine-lqj9`: other duplicate Vercel projects formerly
+  building the same Git commit. Automatic previews disabled and the ignored
+  build step configured to skip all new builds; existing READY deployments
+  and logs are left intact. No project was deleted or reassigned a domain.
+- `f1-prediction-engine`: currently has no active deployment and is not
+  the declared authoritative public game. Keep it unpromoted. Do not
+  silently expand the production-release surface.
 
 ### Canonical Vercel project setting
 
