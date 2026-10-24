@@ -34,12 +34,13 @@ export function AboutPage() {
           <tr><th scope="row">F1 results and qualifying</th><td>Server dataset</td><td>Until replaced by a reviewed refresh</td></tr>
           <tr><th scope="row">Predictions and model evidence</th><td>Server ledger (append-only)</td><td>Kept; contains no visitor data</td></tr>
           <tr><th scope="row">Request counts by route and status</th><td>Server metrics, in memory</td><td>Until the server restarts</td></tr>
-          <tr><th scope="row">Per-visitor request logs (IP address, browser)</th><td>Not written by the app</td><td>None from the app; see below</td></tr>
+          <tr><th scope="row">Per-visitor request logs (IP address, browser)</th><td>Not written by the app</td><td>No access logs; critical errors only; see below</td></tr>
         </tbody>
       </table>
       <p className="data-note">
-        The app's own servers keep no access logs. A hosting provider, CDN or network in front of the
-        site may keep its own logs, which this code cannot switch off. Check the host's settings before
+        The app's own servers keep no access logs. Their error log is limited to critical server
+        faults, which can include the address of the request that caused one. A hosting provider,
+        CDN or network in front of the site may keep its own logs, which this code cannot switch off. Check the host's settings before
         saying a deployment keeps no visitor data.
       </p>
 

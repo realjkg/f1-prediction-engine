@@ -25,6 +25,7 @@ Severity = Literal["info", "warning", "error"]
 _LAP_MS_RANGE = (40_000, 200_000)
 _MAX_POSITION = 30
 _STALE_AFTER_DAYS = 30
+_COVERAGE_LAG_DAYS = 60
 
 
 class QualityFinding(WireModel):
@@ -52,6 +53,8 @@ class DataQualityReport(WireModel):
     source_updated_at: str
     checked_at: str
     source_age_days: int
+    data_through_date: str
+    coverage_lag_days: int
     coverage: list[SeasonCoverage]
     findings: list[QualityFinding]
     training_blocked: bool
@@ -222,8 +225,7 @@ def profile(
             missing_q,
             severity="warning",
             detail=(
-                "Rounds without qualifying leave qualifying-gap features missing "
-                "for later rounds."
+                "Rounds without qualifying leave qualifying-gap features missing for later rounds."
             ),
         )
     )
@@ -302,6 +304,24 @@ def profile(
         )
     )
 
+    through = max((r.date for r in dataset.races), default=None)
+    lag_days = max(0, (now.date() - datetime.fromisoformat(through).date()).days) if through else 0
+    lagging = (
+        [f"latest race {through}, {lag_days} days ago"] if lag_days > _COVERAGE_LAG_DAYS else []
+    )
+    findings.append(
+        _finding(
+            "data coverage is current",
+            lagging,
+            severity="warning",
+            detail=(
+                f"The newest race in the data is {through}. Historical backtests are "
+                "unaffected; predictions for current or upcoming races are unavailable "
+                "until a reviewed refresh adds them."
+            ),
+        )
+    )
+
     record_counts = Counter(r.race.season for r in records)
     coverage = []
     for season in sorted({r.season for r in dataset.races}):
@@ -323,6 +343,8 @@ def profile(
         source_updated_at=dataset.provenance.generatedAt,
         checked_at=now.isoformat(),
         source_age_days=age_days,
+        data_through_date=through or "",
+        coverage_lag_days=lag_days,
         coverage=coverage,
         findings=findings,
         training_blocked=training_blocked,

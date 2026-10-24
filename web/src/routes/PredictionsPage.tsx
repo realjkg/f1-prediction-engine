@@ -384,7 +384,7 @@ const OUTPUT_LABELS: Record<string, string> = {
 function Explanations({ drivers, onCompare }: { drivers: DriverForecast[]; onCompare: () => void }) {
   return (
     <section className="explanations" aria-labelledby="why-title">
-      <h3 id="why-title">Why the favorites rank high</h3>
+      <h3 id="why-title">How the favorites' inputs compare</h3>
       <p className="data-note">
         These notes compare each driver's model inputs with the rest of the field. They describe the
         inputs, not the causes of a result.

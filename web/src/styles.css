@@ -1768,6 +1768,7 @@ h3 {
   letter-spacing: 0.05em;
 }
 .severity-warning { color: var(--color-warn); }
+.check-state { font-weight: 700; font-size: 0.75rem; }
 .severity-error { color: var(--color-danger); }
 .explanations ul { padding-left: 1.1rem; }
 .explanations li { margin: 0.35rem 0; line-height: 1.45; }

@@ -775,6 +775,8 @@ export interface DataQualityReport {
   sourceUpdatedAt: string;
   checkedAt: string;
   sourceAgeDays: number;
+  dataThroughDate: string;
+  coverageLagDays: number;
   coverage: SeasonCoverage[];
   findings: QualityFinding[];
   trainingBlocked: boolean;

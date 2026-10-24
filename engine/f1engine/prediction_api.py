@@ -11,8 +11,9 @@ new model and invents no value:
   is a **historical backtest**: replayed from the ledger, never presented as
   a forecast of an upcoming race.
 * Winner probabilities are served. Podium values are checked for coherence
-  (three podium places means the field should sum to about 3); the stored
-  podium values fail that check, so podium is reported as unsupported.
+  (three podium places means the field should sum to about 3); stored
+  podium values fail it for many races and have no independent evaluation, so
+  podium is reported as unsupported for every race.
 
 Real-world timestamps (`fetchedAt`, `sourceUpdatedAt`) are kept apart from the
 deterministic evidence identifier (`evidenceGeneratedAt`), which is the
@@ -40,6 +41,7 @@ CHECKPOINTS: tuple[Checkpoint, ...] = ("pre-weekend", "post-qualifying")
 PredictionMode = Literal["historical-backtest", "pre-race", "unavailable"]
 
 PODIUM_SUM_TOLERANCE = 0.15
+MIN_WINNERS_FOR_CALIBRATION = 200
 WINNER_SUM_TOLERANCE = 1e-6
 
 FEATURE_LABELS: dict[str, str] = {
@@ -349,9 +351,15 @@ def _feature_cutoff(dataset: PinnedDataset, race: RaceRow) -> FeatureCutoff:
     )
 
 
+_FEATURE_TABLES: dict[str, list[AsOfFeatureRow]] = {}
+
+
 def _features_for(dataset: PinnedDataset, race: RaceRow) -> dict[str, AsOfFeatureRow]:
-    table = build_asof_features(dataset)
-    return {row.driver_id: row for row in table.rows if (row.season, row.round) == _race_key(race)}
+    # The as-of table depends only on the pinned dataset; build it once per digest.
+    if dataset.dataset_sha256 not in _FEATURE_TABLES:
+        _FEATURE_TABLES[dataset.dataset_sha256] = list(build_asof_features(dataset).rows)
+    table_rows = _FEATURE_TABLES[dataset.dataset_sha256]
+    return {row.driver_id: row for row in table_rows if (row.season, row.round) == _race_key(race)}
 
 
 def _reasons(driver: AsOfFeatureRow, field: Sequence[AsOfFeatureRow]) -> list[str]:
@@ -367,7 +375,10 @@ def _reasons(driver: AsOfFeatureRow, field: Sequence[AsOfFeatureRow]) -> list[st
         if rank <= 3:
             label = FEATURE_LABELS[name].removesuffix(" (ms)").lower()
             shown = f"{value:,.0f} ms" if name.endswith("_ms") else f"{value:.1f}"
-            notes.append((rank, f"Ranks {rank} of {len(values)} on {label} ({shown})."))
+            joint = "joint " if values.count(value) > 1 else ""
+            notes.append(
+                (rank, f"Ranks {joint}{rank} of {len(values)} on {label} ({shown}).")
+            )
     if driver.starts < 5:
         notes.append((0, f"Only {driver.starts} prior starts in the data, so form is thin."))
     return [text for _, text in sorted(notes)][:3]
@@ -674,11 +685,24 @@ def evaluate_winners(
         calibration_verdict=(
             f"Not established: only {winners_count} race winners. Calibration needs many "
             "more races before the bins mean anything."
+            if winners_count < MIN_WINNERS_FOR_CALIBRATION
+            else f"Indicative only: {winners_count} race winners across "
+            f"{sum(1 for b in bins if b.predictions)} populated bins; compare predicted "
+            "and observed columns."
         ),
         caveats=[
-            f"{winners_count} races is a small sample; the 95% intervals are wide.",
+            *(
+                [f"{winners_count} races is a small sample; the 95% intervals are wide."]
+                if winners_count < MIN_WINNERS_FOR_CALIBRATION
+                else []
+            ),
             "Intervals are a bootstrap over races, not a guarantee for future races.",
-            "One season only; results may not carry over to new regulations or teams.",
+            (
+                "One season only; results may not carry over to new regulations or teams."
+                if len(seasons) == 1
+                else f"{len(seasons)} seasons pooled; regulation changes between them "
+                "are not modeled."
+            ),
         ],
         bootstrap_resamples=resamples,
         bootstrap_seed=seed,

@@ -93,7 +93,8 @@ export function DataQualityPanel() {
         ready={(view) => (
           <>
             <p className={view.inferenceBlocked || view.trainingBlocked ? "advisory-banner is-warning" : "data-note"}>
-              {view.summary} Data retrieved {view.sourceUpdatedAt.slice(0, 10)} ({view.sourceAgeDays} days ago).
+              {view.summary} The data covers races through {view.dataThroughDate}; it was retrieved{" "}
+              {view.sourceUpdatedAt.slice(0, 10)} ({view.sourceAgeDays} days ago).
             </p>
             <div className="table-scroll"><table className="win-table">
               <caption>Coverage by season</caption>
@@ -115,6 +116,7 @@ export function DataQualityPanel() {
             <ul className="check-list">
               {view.findings.map((finding) => (
                 <li key={finding.check} className={finding.passed ? "is-pass" : "is-fail"}>
+                  <span className="check-state">{finding.passed ? "Passed" : "Failed"}</span>{" "}
                   <span className={`severity severity-${finding.severity}`}>{SEVERITY_LABEL[finding.severity]}</span>{" "}
                   <strong>{finding.check}</strong>
                   {finding.affected > 0 ? ` (${finding.affected} affected)` : ""}

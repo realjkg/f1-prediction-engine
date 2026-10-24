@@ -418,6 +418,7 @@ export const EVALUATION: ModelEvaluationView = {
 export const DATA_QUALITY: DataQualityReport = {
   datasetId: "test.2024", datasetDigest: "a".repeat(64), sourceUpdatedAt: "2026-10-09T22:59:52+00:00",
   checkedAt: "2026-10-23T12:00:00+00:00", sourceAgeDays: 14,
+  dataThroughDate: "2024-03-09", coverageLagDays: 958,
   coverage: [{ season: 2024, races: 2, roundsWithResults: 2, roundsWithQualifying: 2, predictionRecords: 2 }],
   findings: [
     { check: "referential integrity", severity: "info", passed: true, affected: 0, detail: "All rows resolve.", examples: [], blocksTraining: false, blocksInference: false },

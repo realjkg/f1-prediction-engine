@@ -32,6 +32,7 @@ def test_unified_demo_server_keeps_no_access_log(monkeypatch: pytest.MonkeyPatch
 def test_nginx_server_blocks_turn_access_logging_off(conf: str) -> None:
     text = (ROOT / conf).read_text(encoding="utf-8")
     assert re.search(r"^\s*access_log off;", text, re.MULTILINE)
+    assert re.search(r"^\s*error_log \S+ crit;", text, re.MULTILINE)
     assert "log_format" not in text
 
 

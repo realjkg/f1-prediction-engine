@@ -141,8 +141,9 @@ def test_tampered_ledger_fails_closed_without_leaking_paths(
 
 
 def test_readiness_reports_loaded_dataset(client: TestClient) -> None:
-    body = client.get("/readyz").json()
-    assert body["status"] == "ready" and body["predictionRecords"] == 2
+    response = client.get("/readyz")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "datasetId": response.json()["datasetId"]}
 
 
 def test_evaluation_scores_against_winners_and_reports_uncertainty(
@@ -193,3 +194,114 @@ def test_data_quality_endpoint_profiles_coverage(client: TestClient) -> None:
     assert {f["check"] for f in body["findings"]} >= {
         "referential integrity", "no training on the target round or later",
     }
+
+
+# ---- review follow-ups: edge cases the first pass did not cover ----------
+
+def test_leakage_finding_is_clean_for_walk_forward_records_and_blocks_otherwise(
+    predictable_dataset: PinnedDataset, ledger_factory: Callable[..., Path],
+) -> None:
+    record = _records(ledger_factory(5))[0]
+    clean = profile(predictable_dataset, [record])
+    check = next(f for f in clean.findings if f.check.startswith("no training on the target"))
+    assert check.passed is True
+    model_id, prediction = next(iter(record.models.items()))
+    leaked_diag = prediction.diagnostics.model_copy(update={"trained_through_round": 6})
+    leaked = record.model_copy(update={"models": record.models | {
+        model_id: prediction.model_copy(update={"diagnostics": leaked_diag})}})
+    report = profile(predictable_dataset, [leaked])
+    finding = next(f for f in report.findings if f.check.startswith("no training on the target"))
+    assert finding.passed is False and finding.blocks_inference is True
+
+
+def _with_winner(record: PredictionRecord, winner: dict[str, float]) -> PredictionRecord:
+    ensemble = record.ensemble.model_copy(update={"winner": winner})
+    return record.model_copy(update={"ensemble": ensemble})
+
+
+def test_calibration_bins_cover_every_prediction_once_including_edges(
+    predictable_dataset: PinnedDataset, ledger_factory: Callable[..., Path],
+) -> None:
+    four, five = _records(ledger_factory(4, 5))
+    drivers = list(five.ensemble.winner)
+    edge = dict.fromkeys(drivers, 0.0)
+    edge[drivers[0]], edge[drivers[1]], edge[drivers[2]] = 0.4, 0.05, 0.55
+    certain = dict.fromkeys(list(four.ensemble.winner), 0.0)
+    certain[next(iter(certain))] = 1.0
+    view = evaluate_winners(
+        predictable_dataset, [_with_winner(four, certain), _with_winner(five, edge)], resamples=50,
+    )
+    total = len(certain) + len(edge)
+    assert sum(b.predictions for b in view.calibration) == total
+    by_lower = {b.lower: b for b in view.calibration}
+    assert by_lower[0.05].predictions >= 1  # p = 0.05 opens the second bin
+    assert by_lower[0.4].predictions >= 3  # 0.4, 0.55 and the certain 1.0
+
+
+def test_tied_favorites_share_the_hit(
+    predictable_dataset: PinnedDataset, ledger_factory: Callable[..., Path],
+) -> None:
+    record = _records(ledger_factory(5))[0]
+    field = list(record.ensemble.winner)
+    uniform = _with_winner(record, dict.fromkeys(field, 1 / len(field)))
+    view = evaluate_winners(predictable_dataset, [uniform], resamples=20)
+    ensemble = next(score for score in view.scores if score.model_id == "ensemble")
+    assert math.isclose(ensemble.winner_hit_rate.value, 1 / len(field))
+
+
+def test_catalog_keys_by_season_for_repeated_race_ids(real_snapshot: PinnedDataset) -> None:
+    from f1engine.prediction_api import build_catalog
+
+    catalog = build_catalog(real_snapshot, [])
+    keys = [(race.season, race.race_id) for race in catalog.races]
+    assert len(keys) == len(set(keys)) == len(real_snapshot.races)
+    assert len({race.race_id for race in catalog.races}) < len(keys)  # ids do repeat
+    assert catalog.supported_total == 0
+
+
+def test_rounds_without_results_are_upcoming_and_never_predicted(
+    predictable_dataset: PinnedDataset,
+) -> None:
+    from dataclasses import replace
+
+    from f1engine.prediction_api import build_catalog
+
+    future = replace(predictable_dataset, results=tuple(
+        row for row in predictable_dataset.results if row.round != 5))
+    catalog = build_catalog(future, [])
+    race = next(r for r in catalog.races if r.round == 5)
+    assert race.status == "upcoming" and race.prediction_mode == "unavailable"
+    assert "entry list" in (race.checkpoints[0].reason or "")
+    assert catalog.upcoming_races == 1
+
+
+def test_first_race_has_no_earlier_cutoff(predictable_dataset: PinnedDataset) -> None:
+    from f1engine.prediction_api import _feature_cutoff
+
+    first = min(predictable_dataset.races, key=lambda r: (r.season, r.round))
+    cutoff = _feature_cutoff(predictable_dataset, first)
+    assert cutoff.through_round is None and cutoff.through_race_date is None
+
+
+def test_reasons_mark_joint_ranks(predictable_dataset: PinnedDataset) -> None:
+    from f1engine.features import build_asof_features
+    from f1engine.prediction_api import _reasons
+
+    rows = [r for r in build_asof_features(predictable_dataset).rows if r.round == 5]
+    tied = [r.model_copy(update={
+        "team_points_mean": 10.0, "form_finish_mean": None, "q_delta_pole_ms": None,
+        "track_finish_mean": None, "starts": 20,
+    }) for r in rows]
+    notes = _reasons(tied[0], tied)
+    assert any("Ranks joint 1" in note and "team points" in note for note in notes)
+
+
+def test_coverage_lag_is_flagged_without_blocking(
+    predictable_dataset: PinnedDataset, ledger_factory: Callable[..., Path],
+) -> None:
+    latest = max(r.date for r in predictable_dataset.races)
+    report = profile(predictable_dataset, _records(ledger_factory(5)),
+                     now=datetime.fromisoformat(latest).replace(tzinfo=UTC) + timedelta(days=400))
+    lag = next(f for f in report.findings if f.check == "data coverage is current")
+    assert lag.passed is False and lag.blocks_inference is False
+    assert report.data_through_date == latest and report.coverage_lag_days == 400

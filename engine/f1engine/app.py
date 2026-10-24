@@ -627,7 +627,7 @@ def create_app(
         """
         if not catalog.knows(race_id):
             raise _error(
-                404, "RACE_UNKNOWN", f"no race {race_id!r} in the pinned snapshot"
+                404, "RACE_UNKNOWN", f"no race {race_id[:60]!r} in the pinned snapshot"
             )
         if season is None:
             seasons = catalog.seasons_for(race_id)
@@ -643,7 +643,7 @@ def create_app(
             raise _error(
                 404,
                 "RACE_UNKNOWN",
-                f"no race {race_id!r} for season {season} in the pinned snapshot",
+                f"no race {race_id[:60]!r} for season {season} in the pinned snapshot",
             )
         return race
 
@@ -886,29 +886,53 @@ def create_app(
         flag = records[-1].ensemble.consensus.flag  # latest append; verdicts are deterministic
         return score_call_sheet(_parse_call(call, loaded), result, flag, streak_before)
 
-    def prediction_records() -> list[PredictionRecord]:
+    # Derived views are recomputed only when the ledger file changes (size or
+    # mtime); the dataset is fixed for the process. Verification still runs on
+    # every change, so a tampered ledger is refused on the next request.
+    view_cache: dict[str, object] = {}
+
+    def _ledger_stamp() -> tuple[int, int] | None:
         try:
-            return [r for r in ledger.read_all() if isinstance(r, PredictionRecord)]
-        except EvidenceError as error:
-            raise _error(503, error.code, str(error)) from error
+            stat = resolved.ledger_path.stat()
+        except FileNotFoundError:
+            return None
+        return (stat.st_mtime_ns, stat.st_size)
+
+    def prediction_records() -> list[PredictionRecord]:
+        stamp = _ledger_stamp()
+        if view_cache.get("stamp") != stamp or "records" not in view_cache:
+            try:
+                records = [r for r in ledger.read_all() if isinstance(r, PredictionRecord)]
+            except EvidenceError as error:
+                view_cache.clear()
+                raise _error(503, error.code, str(error)) from error
+            view_cache.clear()
+            view_cache.update(stamp=stamp, records=records)
+        return view_cache["records"]  # type: ignore[return-value]
+
+    def cached_view(name: str, build):  # noqa: ANN001, ANN202
+        records = prediction_records()
+        if name not in view_cache:
+            view_cache[name] = build(records)
+        return view_cache[name]
 
     @app.get("/readyz")
     def readiness(response: Response) -> dict[str, object]:
         """Ready only when the snapshot is loaded and the evidence chain verifies."""
         response.headers["Cache-Control"] = "no-store"
         try:
-            records = prediction_records()
+            # Not cached: freshness and coverage lag depend on the current time.
+            report = profile_data_quality(loaded, prediction_records())
         except HTTPException as error:
             raise _error(503, "NOT_READY", "evidence ledger failed verification") from error
-        return {
-            "status": "ready", "datasetId": loaded.dataset_id,
-            "predictionRecords": len(records),
-        }
+        if report.inference_blocked:
+            raise _error(503, "NOT_READY", "data-quality checks block inference")
+        return {"status": "ready", "datasetId": loaded.dataset_id}
 
     @app.get("/api/prediction-catalog")
     def prediction_catalog() -> PredictionCatalogView:
         """Every race with its prediction mode and which checkpoints are supported."""
-        return build_catalog(loaded, prediction_records())
+        return cached_view("catalog", lambda records: build_catalog(loaded, records))
 
     @app.get("/api/races/{race_id}/prediction")
     def race_prediction(
@@ -933,7 +957,9 @@ def create_app(
     def model_evaluation() -> ModelEvaluationView:
         """Winner hit rate, log loss and Brier score with bootstrap intervals."""
         try:
-            return evaluate_winners(loaded, prediction_records())
+            return cached_view(
+                "evaluation", lambda records: evaluate_winners(loaded, records)
+            )
         except PredictionUnavailable as error:
             raise _error(404, error.code, str(error)) from error
 
