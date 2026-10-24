@@ -4,14 +4,14 @@ updates:
   - package-ecosystem: pip
     directory: /engine
     schedule:
-      interval: weekly
+      interval: monthly
   # Web app dependencies (npm).
   - package-ecosystem: npm
     directory: /web
     schedule:
-      interval: weekly
+      interval: monthly
   # CI workflow actions.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
