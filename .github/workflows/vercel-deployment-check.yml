@@ -1,0 +1,39 @@
+name: Vercel deployment check
+
+# Waits for every Vercel build of the pushed commit, then fails if an expected
+# project failed or an unexpected project (not in deploy/vercel/projects.json)
+# is building this repository and failing. Unexpected projects that succeed are
+# warnings. Optional secrets VERCEL_TOKEN and VERCEL_TEAM_ID add Vercel's own
+# error code and message to the report; without them the check still runs.
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: read
+
+concurrency:
+  group: vercel-deployment-check-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Vercel builds for this commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Unit tests for the deployment check
+        run: python3 -m unittest discover -s scripts/tests -p test_check_vercel_deployments.py -v
+
+      - name: Wait for Vercel and compare with the expected projects
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+        run: python3 scripts/check-vercel-deployments.py --wait-seconds 900

@@ -1,0 +1,10 @@
+{
+  "description": "Vercel projects that are supposed to deploy this repository. Any other Vercel project building it is flagged by scripts/check-vercel-deployments.py.",
+  "projects": {
+    "f1-pitwall-demo": {
+      "framework": "container",
+      "dockerfile": "Dockerfile.vercel",
+      "role": "Public demo: React app, read-only API and frozen evidence in one image"
+    }
+  }
+}
