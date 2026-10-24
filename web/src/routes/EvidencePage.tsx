@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { AdvisoryBanner } from "../components/AdvisoryBanner";
 import { ConsensusChip } from "../components/ConsensusChip";
 import { ResourceView } from "../components/EngineError";
+import { DataQualityPanel } from "../components/EvaluationPanels";
 import { ModelComparison } from "../components/ModelComparison";
 import { ProbabilityBars } from "../components/ProbabilityBars";
 import { isBacktestRecord, isPredictionRecord } from "../lib/calls";
@@ -162,7 +163,10 @@ export function EvidencePage({ onView }: EvidencePageProps) {
 
   return (
     <section className="evidence-room" aria-label="Evidence room">
-      <h1>Evidence Room</h1>
+      <h1>Data &amp; Evidence</h1>
+      <DataQualityPanel />
+
+      <h2>Evidence Room</h2>
       <p className="screen-intro">
         The engine's hash-chained ledger, served only while the chain verifies. Tampering with any record breaks every
         chain after it.

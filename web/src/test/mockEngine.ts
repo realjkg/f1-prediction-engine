@@ -20,6 +20,11 @@ import type {
   RaceResultView,
   RacesView,
   RoundCall,
+  CatalogRace,
+  DataQualityReport,
+  ModelEvaluationView,
+  PredictionCatalogView,
+  PredictionEnvelope,
 } from "../types";
 
 export const CONFIG: ConfigView = {
@@ -293,6 +298,135 @@ export interface MockEngine {
  * Install the mock over globalThis.fetch. jsdom's window.fetch shadows
  * Node's — override both so the app's same-origin client hits the mock.
  */
+/* ---- pre-race prediction contracts (engine/f1engine/prediction_api.py) ---- */
+
+const checkpoints = (supported: boolean, reason: string | null): CatalogRace["checkpoints"] => [
+  { checkpoint: "pre-weekend", supported, reason },
+  {
+    checkpoint: "post-qualifying",
+    supported: false,
+    reason: "The models read only rounds before the race, not that race's own qualifying.",
+  },
+];
+
+export const CATALOG: PredictionCatalogView = {
+  races: [
+    {
+      raceId: "saudi-arabia-gp", season: 2024, round: 2, name: "Saudi Arabian Grand Prix",
+      raceDate: "2024-03-09", circuitName: "Jeddah Corniche Circuit", country: "Saudi Arabia",
+      status: "completed", predictionMode: "historical-backtest", checkpoints: checkpoints(true, null),
+    },
+    {
+      raceId: "bahrain-gp", season: 2024, round: 1, name: "Bahrain Grand Prix",
+      raceDate: "2024-03-02", circuitName: "Bahrain International Circuit", country: "Bahrain",
+      status: "completed", predictionMode: "historical-backtest", checkpoints: checkpoints(true, null),
+    },
+    {
+      raceId: "austrian-grand-prix", season: 2020, round: 1, name: "Austrian Grand Prix",
+      raceDate: "2020-07-05", circuitName: "Red Bull Ring", country: "Austria",
+      status: "completed", predictionMode: "unavailable",
+      checkpoints: checkpoints(false, "No prediction record for this round in the evidence ledger."),
+    },
+  ],
+  total: 3,
+  supportedTotal: 2,
+  datasetId: "test.2024",
+  datasetDigest: "a".repeat(64),
+  dataThroughDate: "2024-03-09",
+  upcomingRaces: 0,
+  upcomingNote: "No upcoming races are in the pinned data.",
+  advisoryOnly: true,
+};
+
+const FEATURE_LABELS = {
+  form_finish_mean: "Average finish, last five rounds",
+  team_points_mean: "Team points per round, prior rounds",
+};
+
+export function predictionEnvelope(raceId: string): PredictionEnvelope {
+  const race = CATALOG.races.find((entry) => entry.raceId === raceId)!;
+  const record = raceId === "saudi-arabia-gp" ? SAUDI_RECORD : BAHRAIN_RECORD;
+  const teams: Record<string, string> = { max_verstappen: "Red Bull", perez: "Red Bull", leclerc: "Ferrari", sainz: "Ferrari" };
+  const ordered = Object.entries(record.ensemble.winner).sort((a, b) => b[1] - a[1]);
+  return {
+    raceId, season: race.season, round: race.round, raceName: race.name, raceDate: race.raceDate,
+    circuitName: race.circuitName, country: race.country, session: "race",
+    predictionMode: "historical-backtest", checkpoint: "pre-weekend",
+    predictionGeneratedAt: null, evidenceGeneratedAt: "2024-03-01T00:00:00Z",
+    featureCutoff: {
+      throughSeason: 2023, throughRound: 22, throughRaceName: "Abu Dhabi Grand Prix",
+      throughRaceDate: "2023-11-26",
+      excludes: ["This race's practice, qualifying, grid and penalties", "This race's result and anything later"],
+    },
+    sourceUpdatedAt: "2026-10-09T22:59:52+00:00", fetchedAt: "2026-10-23T12:00:00+00:00",
+    freshness: "historical", freshnessNote: "Replayed from data retrieved 2026-10-09. This race is finished.",
+    modelRevision: "m1-gbm+m2-logit+m3-form@seed-2026", models: ["m1-gbm", "m2-logit", "m3-form"],
+    datasetId: "test.2024", datasetDigest: "a".repeat(64), evidencePredictionId: record.predictionId,
+    provenance: [{ provider: "jolpica-f1", role: "results", fetchedAt: "2026-10-09T22:59:52+00:00", license: "CC-BY-NC-SA-4.0" }],
+    outputs: [
+      { output: "winner", supported: true, reason: "Ensemble of three models; sums to 1 across the field." },
+      { output: "podium", supported: false, reason: "Stored podium values do not add up to three podium places." },
+      { output: "points", supported: false, reason: "No points model has been trained." },
+    ],
+    drivers: ordered.map(([driverId, probability], index) => ({
+      driverId,
+      driverName: driverId === "max_verstappen" ? "Max Verstappen" : driverId[0].toUpperCase() + driverId.slice(1),
+      driverCode: driverId.slice(0, 3).toUpperCase(),
+      constructorId: (teams[driverId] ?? "team").toLowerCase().replace(" ", "_"),
+      constructorName: teams[driverId] ?? "Team",
+      rank: index + 1,
+      winProbability: probability,
+      perModelWinProbability: { "m1-gbm": probability, "m2-logit": probability, "m3-form": probability },
+      features: { form_finish_mean: index + 1.5, team_points_mean: index === 3 ? null : 30 - index },
+      reasons: index === 0 ? ["Ranks 1 of 4 on average finish, last five rounds (1.5)."] : [],
+    })),
+    featureLabels: FEATURE_LABELS,
+    consensusFlag: record.ensemble.consensus.flag,
+    baseline: { name: "Blind guess", winProbability: 1 / ordered.length, detail: `Picking any of the ${ordered.length} entrants at random.` },
+    missingInputs: [
+      { input: "Weather forecast", status: "not-in-dataset", detail: "No forecast weather is stored.", sourceNeeded: "An archived pre-race forecast provider" },
+    ],
+    limitations: ["no in-race telemetry in the pinned window"],
+    validation: [
+      { check: "ensemble winner probabilities sum to 1", passed: true, detail: "sum = 1.000000" },
+      { check: "podium probabilities sum to about 3", passed: false, detail: "ensemble sum = 2.54" },
+    ],
+    outcomeAvailable: true,
+    advisoryOnly: true,
+  };
+}
+
+const estimate = (value: number) => ({ value, ciLow: value * 0.8, ciHigh: value * 1.2 });
+
+export const EVALUATION: ModelEvaluationView = {
+  cohort: "2024 season prediction records", method: "Walk-forward.", rounds: 2, season: 2024,
+  scores: ["m1-gbm", "m2-logit", "m3-form", "ensemble"].map((modelId) => ({
+    modelId, rounds: 2, winnerHitRate: estimate(0.5), winnerLogLoss: estimate(1.2),
+    winnerBrier: estimate(0.6), meanProbabilityOnWinner: 0.4,
+  })),
+  baseline: {
+    modelId: "blind-guess", rounds: 2, winnerHitRate: estimate(0.25), winnerLogLoss: estimate(1.39),
+    winnerBrier: estimate(0.75), meanProbabilityOnWinner: 0.25,
+  },
+  calibrationModel: "ensemble",
+  calibration: [{ lower: 0, upper: 0.05, predictions: 4, meanPredicted: 0.02, observedWinRate: 0 }],
+  calibrationVerdict: "Not established: only 2 race winners.",
+  caveats: ["2 races is a small sample; the 95% intervals are wide."],
+  bootstrapResamples: 200, bootstrapSeed: 2026, advisoryOnly: true,
+};
+
+export const DATA_QUALITY: DataQualityReport = {
+  datasetId: "test.2024", datasetDigest: "a".repeat(64), sourceUpdatedAt: "2026-10-09T22:59:52+00:00",
+  checkedAt: "2026-10-23T12:00:00+00:00", sourceAgeDays: 14,
+  dataThroughDate: "2024-03-09", coverageLagDays: 958,
+  coverage: [{ season: 2024, races: 2, roundsWithResults: 2, roundsWithQualifying: 2, predictionRecords: 2 }],
+  findings: [
+    { check: "referential integrity", severity: "info", passed: true, affected: 0, detail: "All rows resolve.", examples: [], blocksTraining: false, blocksInference: false },
+    { check: "podium probabilities sum to about 3", severity: "warning", passed: false, affected: 1, detail: "Podium withheld.", examples: ["2024-1: 2.54"], blocksTraining: false, blocksInference: false },
+  ],
+  trainingBlocked: false, inferenceBlocked: false, summary: "No blocking problems. 1 check(s) need attention.",
+};
+
 export function installMockEngine(): MockEngine {
   const requests: string[] = [];
   let failing = false;
@@ -311,6 +445,21 @@ export function installMockEngine(): MockEngine {
     const path = parsed.pathname;
     const parts = path.split("/"); // e.g. ["", "api", "races", "bahrain-gp", "score"]
     if (path.startsWith("/api/config")) return jsonResponse(CONFIG);
+    if (path === "/api/prediction-catalog") return jsonResponse(CATALOG);
+    if (path === "/api/model-evaluation") return jsonResponse(EVALUATION);
+    if (path === "/api/data-quality") return jsonResponse(DATA_QUALITY);
+    if (parts[2] === "races" && parts[4] === "prediction") {
+      const raceId = parts[3] ?? "";
+      const race = CATALOG.races.find((entry) => entry.raceId === raceId);
+      if (!race) return jsonResponse({ detail: { code: "RACE_UNKNOWN", message: "unknown race" } }, 404);
+      if (parsed.searchParams.get("checkpoint") === "post-qualifying") {
+        return jsonResponse({ detail: { code: "CHECKPOINT_UNSUPPORTED", message: "not supported" } }, 409);
+      }
+      if (race.predictionMode === "unavailable") {
+        return jsonResponse({ detail: { code: "PREDICTION_UNAVAILABLE", message: "no record" } }, 404);
+      }
+      return jsonResponse(predictionEnvelope(raceId));
+    }
     if (path === "/api/live/status") return jsonResponse({
       feedState: "not-configured", evidenceState: "none",
       inferenceState: "unavailable", season: Number(parsed.searchParams.get("season") ?? 2026),

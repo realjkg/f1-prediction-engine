@@ -75,6 +75,31 @@ Future live feeds: move a licensed MQTT/TLS 1.3 collector, durable event
 stream, and prospective model calibration to a separate private, stateful
 service. The public historical demo cannot claim current-race accuracy.
 
+## Detecting broken or unexpected Vercel deployments
+
+`deploy/vercel/projects.json` lists the Vercel projects that are meant to deploy
+this repository (today only `f1-pitwall-demo`, a container build from
+`Dockerfile.vercel`). On every push, `.github/workflows/vercel-deployment-check.yml`
+runs `scripts/check-vercel-deployments.py`, which waits for each commit's
+`Vercel – <project>` statuses and then:
+
+- fails if an expected project failed or a status stayed pending;
+- fails if a project that is not in the manifest is building the repository and
+  failing (for example a FastAPI-preset project, which stops with
+  `FASTAPI_ENTRYPOINT_NOT_FOUND` because this repository has no `app.py`-style entrypoint);
+- warns when an unexpected project builds successfully, because it may publish a
+  copy that is not the reviewed demo (for example a Vite-only frontend with no engine).
+
+Optional: a `VERCEL_TOKEN` secret (and `VERCEL_TEAM_ID` variable for team projects)
+adds Vercel's own error code and message to the report.
+
+Owner action: the account also has `f1-prediction-engine-xcif` and
+`f1-prediction-engine-qriu` (FastAPI preset, failing on every commit),
+`f1-prediction-engine-k469` and `f1-prediction-engine-n3sd` (Vite preset,
+frontend only) and `f1-prediction-engine-lqj9` (a second container build).
+Disconnect the ones that are not wanted, or add them to the manifest with their
+intended preset.
+
 ## Rollback / release record
 
 For each promoted build retain the commit SHA, Vercel deployment ID/URL,

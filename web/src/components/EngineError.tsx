@@ -14,8 +14,8 @@ function errorHeadline(error: ApiError): string {
   switch (error.code) {
     case "ENGINE_UNREACHABLE":
       return typeof navigator !== "undefined" && navigator.onLine === false
-        ? "You're offline. Your saved calls are safe on this device; retry once you're back online."
-        : "Can't reach the prediction engine. Your saved calls are safe on this device; retry in a moment. Running it yourself? Start it with make demo.";
+        ? "You're offline. Retry once you're back online."
+        : "Can't reach the prediction engine. Retry in a moment. Running it yourself? Start it with make demo.";
     case "RACE_UNKNOWN":
       return "The engine has no race under that identity.";
     case "RACE_AMBIGUOUS":
@@ -59,6 +59,14 @@ function errorHeadline(error: ApiError): string {
       return "No generated software inventory is installed with this engine.";
     case "SBOM_INVALID":
       return "The software inventory or source lockfile integrity check failed.";
+    case "CHECKPOINT_UNSUPPORTED":
+      return "That prediction checkpoint is not supported for this race.";
+    case "PREDICTION_UNAVAILABLE":
+      return "No prediction exists for this race and checkpoint.";
+    case "EVALUATION_UNAVAILABLE":
+      return "No scored predictions are available to evaluate yet.";
+    case "NOT_READY":
+      return "The engine is starting or its evidence failed verification.";
     case "RESPONSE_NOT_OK":
       return "The engine answered with an error.";
     case "RESPONSE_INVALID":

@@ -1,6 +1,7 @@
 import { AdvisoryBanner } from "../components/AdvisoryBanner";
 import { ConsensusChip } from "../components/ConsensusChip";
 import { ResourceView } from "../components/EngineError";
+import { ModelEvaluationPanel } from "../components/EvaluationPanels";
 import {
   TYPICAL_GRID_SIZE,
   formatHitFraction,
@@ -91,18 +92,24 @@ export function ModelsPage({ record }: ModelsPageProps) {
 
   return (
     <section className="gauntlet" aria-label="Model standings">
-      <h1>Model Gauntlet</h1>
+      <h1>Model performance</h1>
       <p className="screen-intro">
-        Every round you play, all five of us get scored by the engine, the same way. Beat the ensemble — almost
+        How the stored winner predictions scored against what actually happened, next to a blind guess.
+      </p>
+      <ModelEvaluationPanel />
+
+      <h2>Model Gauntlet</h2>
+      <p className="screen-intro">
+        The Rewind game's standings for this visit. Every round you play, all five of us get scored by the engine, the same way. Beat the ensemble — almost
         nobody does.
       </p>
 
       {played.length === 0 ? (
         <p className="empty-state">
-          No rounds played yet. Call a race on the Race tab — the standings fill in as you go.
+          No rounds played yet. Call a race on the Rewind tab — the standings fill in as you go.
         </p>
       ) : (
-        <table className="standings-table">
+        <table className="standings-table" aria-label="Rewind standings">
           <thead>
             <tr>
               <th scope="col">Competitor</th>

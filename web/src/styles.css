@@ -1628,3 +1628,166 @@ h3 {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
 }
+
+/* ---- keyboard focus (all interactive elements) ---- */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ---- race predictions, compare, evaluation, data quality, about ---- */
+.nav-divider {
+  flex: none;
+  align-self: stretch;
+  width: 1px;
+  margin: 0.4rem 0.25rem;
+  background: var(--color-border);
+}
+.prediction-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: flex-end;
+  margin: 0.75rem 0;
+}
+.race-picker { display: grid; gap: 0.25rem; min-width: min(100%, 20rem); }
+.race-picker-label { font-size: 0.8rem; color: var(--color-text-muted); }
+.race-picker select {
+  min-height: 2.75rem;
+  padding: 0 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  max-width: 100%;
+}
+.checkpoint-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  padding: 0.25rem 0.75rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+.checkpoint-picker legend { font-size: 0.8rem; color: var(--color-text-muted); padding: 0 0.25rem; }
+.checkpoint-picker label { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.75rem; }
+.checkpoint-picker .is-unsupported { color: var(--color-text-muted); }
+.unsupported-tag { font-size: 0.8rem; }
+.race-prediction {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  padding: 1rem;
+  margin-top: 0.75rem;
+}
+.race-prediction-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.race-prediction-head h2 { margin: 0; font-size: 1.25rem; }
+.race-context { margin: 0.25rem 0 0; color: var(--color-text-muted); font-size: 0.875rem; }
+.mode-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.mode-historical-backtest { color: var(--color-accent); }
+.mode-unavailable { color: var(--color-warn); border-style: dashed; }
+.mode-synthetic { color: var(--color-hue-papaya); border-style: dotted; }
+.mode-live { color: var(--color-danger); }
+.data-note, .freshness-note, .baseline-note { color: var(--color-text-muted); font-size: 0.85rem; line-height: 1.5; }
+.unavailable-panel {
+  margin-top: 0.75rem;
+  padding: 0.9rem;
+  border: 1px dashed var(--color-warn);
+  border-radius: 10px;
+}
+.unavailable-panel h3 { margin-top: 0; }
+.prediction-grid { display: grid; gap: 1.25rem; margin-top: 0.75rem; }
+.prediction-grid h3 { font-size: 1rem; margin: 1rem 0 0.5rem; }
+.prediction-side section { border-top: 1px solid var(--color-border); }
+.prediction-side section:first-child { border-top: none; }
+.win-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.win-table caption { text-align: left; color: var(--color-text-muted); font-size: 0.8rem; padding-bottom: 0.4rem; }
+.win-table th, .win-table td {
+  padding: 0.45rem 0.4rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: middle;
+}
+.win-table thead th { font-size: 0.75rem; color: var(--color-text-muted); font-weight: 600; }
+.win-table tbody th { font-weight: 500; }
+.win-table .num { white-space: nowrap; }
+.win-table .baseline-row th, .win-table .baseline-row td { color: var(--color-text-muted); font-style: italic; }
+.driver-code { font-weight: 700; font-size: 0.75rem; letter-spacing: 0.05em; color: var(--color-text-muted); }
+.win-cell { display: flex; align-items: center; gap: 0.5rem; min-width: 7rem; }
+.win-bar {
+  flex: 1;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--color-surface-raised);
+  overflow: hidden;
+  min-width: 3rem;
+}
+.win-bar > span { display: block; height: 100%; background: var(--color-accent); }
+.model-key { border-bottom: 3px solid; padding-bottom: 0.1rem; white-space: nowrap; }
+.table-scroll { overflow-x: auto; max-width: 100%; }
+.ci { color: var(--color-text-muted); font-size: 0.75rem; }
+.text-button {
+  min-height: 2.75rem;
+  padding: 0 0.25rem;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.support-list, .check-list, .limit-list { margin: 0; padding-left: 0; list-style: none; }
+.limit-list { padding-left: 1.1rem; list-style: disc; }
+.support-list li, .check-list li { padding: 0.4rem 0; font-size: 0.875rem; line-height: 1.45; }
+.support-list li { display: grid; gap: 0.15rem; }
+.support-list span, .check-detail { color: var(--color-text-muted); font-size: 0.8rem; }
+.check-list .is-fail { color: var(--color-warn); }
+.severity {
+  display: inline-block;
+  min-width: 4.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.severity-warning { color: var(--color-warn); }
+.check-state { font-weight: 700; font-size: 0.75rem; }
+.severity-error { color: var(--color-danger); }
+.explanations ul { padding-left: 1.1rem; }
+.explanations li { margin: 0.35rem 0; line-height: 1.45; }
+.outcome-note { padding: 0.6rem 0.75rem; border-left: 3px solid var(--color-accent); background: var(--color-surface-raised); }
+.evaluation, .data-quality { margin: 1rem 0 1.5rem; }
+.evaluation .win-table, .data-quality .win-table, .compare-body .win-table, .retention-table { margin: 0.5rem 0 1rem; }
+.about code { font-size: 0.85em; }
+
+/* Narrow phones: per-model and team columns would crowd the win chance. */
+@media (max-width: 599px) {
+  .col-model, .col-team { display: none; }
+  .ci { display: block; }
+  .race-picker, .race-picker select { width: 100%; }
+}
+
+@media (min-width: 1100px) {
+  .prediction-grid { grid-template-columns: minmax(0, 3fr) minmax(16rem, 2fr); align-items: start; }
+}
+
+@media (min-width: 900px) {
+  .nav-divider { width: auto; height: 1px; margin: 0.5rem 0.75rem; }
+}

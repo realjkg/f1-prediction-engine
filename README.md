@@ -122,9 +122,31 @@ requires a future finish-order model and independent validation.
 | Backtest accuracy | Expanding-window backtest vs actual results — winner hit rate, podium@3, Brier — per model and ensemble |
 | One-command demo | `make demo` — repeatable to the byte |
 
-## Pit Wall — the game on top
+## Race predictions — the main screen
 
-**Race Rewind** is the core loop: pick any completed 2020–2024 round, read the
+The app opens on **Race Predictions**: pick a race and see each driver's chance
+to win, labeled with its mode (HISTORICAL, PRE-RACE, SYNTHETIC, LIVE or
+UNAVAILABLE), the checkpoint, the last race whose data it used, when the source
+data was retrieved, the model revision and dataset digest. It lists which
+outputs are shown and which are not (podium, points, finishing order,
+retirement risk and uncertainty ranges are not), the inputs the prediction does
+not have, the checks run on its numbers, and a blind-guess baseline. **Compare**
+puts two drivers' model inputs side by side and adds up each team's chance.
+**Performance** scores the stored winner predictions against the real winners
+(hit rate, log loss, Brier score with bootstrap intervals, calibration bins).
+**Data & Evidence** adds a data-quality profile above the evidence ledger.
+
+What is genuinely supported today: the 24 rounds of 2024, at the **before the
+race weekend** checkpoint, for the **winner** only. The models read only rounds
+before the race, so a post-qualifying checkpoint is shown as not supported. The
+pinned data ends in 2024, so there are no upcoming-race predictions; they need a
+reviewed current-season refresh. Read-only endpoints:
+`GET /api/prediction-catalog`, `GET /api/races/{raceId}/prediction?season=&checkpoint=`,
+`GET /api/model-evaluation`, `GET /api/data-quality`, and `GET /readyz`.
+
+## Pit Wall — the Rewind game
+
+**Race Rewind** is a secondary game: pick any completed 2020–2024 round, read the
 call sheet (the field the models scored — the API serves no grid order or
 form, and the sheet says so), lock P1/P2/P3 inside a 30-second timer, and get
 the reveal: your podium vs the actual result vs every model's card, with
@@ -136,7 +158,9 @@ Rounds** where the ensemble flags `LOW_CONSENSUS` (shown in the app as *Models
 disagree*), because a split machine
 means your gut is the only edge. Exact hits extend a streak (flame at 3); six
 badges ship, from *First Exact Podium* to *Data Nerd*. Your pit-wall record
-lives in `localStorage` — no accounts in Milestone 1. Hindsight is
+lives only in the page's memory and resets on reload; nothing about the player
+is stored in the browser, and no accounts exist (see
+[docs/PRIVACY.md](docs/PRIVACY.md)). Hindsight is
 acknowledged on every reveal card: you may remember these results; the models
 do not get that memory.
 
@@ -167,8 +191,10 @@ The web app is an installable, mobile-first PWA (manifest + service worker).
 On phones it is a single column with bottom tabs; at 900px and wider the tabs
 become a left rail and the reveal and ledger use columns. It follows the system
 light or dark setting, keeps tap targets at 44px and clear of the iOS home
-indicator, and skips confetti under reduced motion. Routes: Race, Live Lab,
-Models, Evidence, Brief, Observability, Inventory, Settings.
+indicator, shows a visible focus ring for keyboard use, and skips confetti
+under reduced motion. Primary routes: Predictions, Compare, Performance,
+Data & Evidence, About. Separate: Live Lab, Rewind, Brief, Observability,
+Inventory, Settings.
 
 - **Android/Chrome (desktop):** open the served app → install prompt, or
   menu → *Install app* / *Add to Home screen*.
@@ -210,7 +236,7 @@ are explicitly out of scope for Milestone 1.
 | --- | --- |
 | `engine/f1engine/` | FastAPI app + implemented engine: ingestion, features, models, ensemble, scoring, evidence ledger, brief, observability |
 | `engine/tests/` | pytest — one flat file per domain |
-| `web/` | Vite + React + TS PWA (Race Rewind, Live Lab, Model Gauntlet, Evidence Room, Brief, Observability, Inventory, Settings) + Capacitor shells |
+| `web/` | Vite + React + TS PWA (Race Predictions, Compare, Performance, Data & Evidence, About; Live Lab, Rewind game, Brief, Observability, Inventory, Settings) + Capacitor shells |
 | `data/snapshot/` | Pinned dataset (`DATASET_VERSION`, `provenance.json`, parquet) + `DATA_LICENSE.md` |
 | `docs/evidence/` | Recorded integration evidence (determinism runs) |
 | `scripts/` | `demo.py` (one-command demo), `refresh-data.py` (offline snapshot regen), `generate-driver-directory.py` |

@@ -56,6 +56,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from f1engine.backtest import ClassifiedResult, classify_round
+from f1engine.data_quality import DataQualityReport
+from f1engine.data_quality import profile as profile_data_quality
 from f1engine.ensemble import PODIUM_SPREAD_OK_THRESHOLD
 from f1engine.evidence import (
     EvidenceError,
@@ -76,6 +78,16 @@ from f1engine.lap_trace import LapTraceError, LapTraceRecord, get_lap_observatio
 from f1engine.live_prior import UpdatedScenario
 from f1engine.live_status import LiveStatusInvalid, LiveStatusView, live_status
 from f1engine.observability import EventStatus, Signal
+from f1engine.prediction_api import (
+    Checkpoint,
+    ModelEvaluationView,
+    PredictionCatalogView,
+    PredictionEnvelope,
+    PredictionUnavailable,
+    build_catalog,
+    build_envelope,
+    evaluate_winners,
+)
 from f1engine.scoring import CallScore, PitCall, score_call_sheet
 from f1engine.supply_chain import SupplyChainError, SupplyChainView, read_supply_chain
 from f1engine.wire import WireModel
@@ -615,7 +627,7 @@ def create_app(
         """
         if not catalog.knows(race_id):
             raise _error(
-                404, "RACE_UNKNOWN", f"no race {race_id!r} in the pinned snapshot"
+                404, "RACE_UNKNOWN", f"no race {race_id[:60]!r} in the pinned snapshot"
             )
         if season is None:
             seasons = catalog.seasons_for(race_id)
@@ -631,7 +643,7 @@ def create_app(
             raise _error(
                 404,
                 "RACE_UNKNOWN",
-                f"no race {race_id!r} for season {season} in the pinned snapshot",
+                f"no race {race_id[:60]!r} for season {season} in the pinned snapshot",
             )
         return race
 
@@ -873,6 +885,88 @@ def create_app(
             )
         flag = records[-1].ensemble.consensus.flag  # latest append; verdicts are deterministic
         return score_call_sheet(_parse_call(call, loaded), result, flag, streak_before)
+
+    # Derived views are recomputed only when the ledger file changes (size or
+    # mtime); the dataset is fixed for the process. Verification still runs on
+    # every change, so a tampered ledger is refused on the next request.
+    view_cache: dict[str, object] = {}
+
+    def _ledger_stamp() -> tuple[int, int] | None:
+        try:
+            stat = resolved.ledger_path.stat()
+        except FileNotFoundError:
+            return None
+        return (stat.st_mtime_ns, stat.st_size)
+
+    def prediction_records() -> list[PredictionRecord]:
+        stamp = _ledger_stamp()
+        if view_cache.get("stamp") != stamp or "records" not in view_cache:
+            try:
+                records = [r for r in ledger.read_all() if isinstance(r, PredictionRecord)]
+            except EvidenceError as error:
+                view_cache.clear()
+                raise _error(503, error.code, str(error)) from error
+            view_cache.clear()
+            view_cache.update(stamp=stamp, records=records)
+        return view_cache["records"]  # type: ignore[return-value]
+
+    def cached_view(name: str, build):  # noqa: ANN001, ANN202
+        records = prediction_records()
+        if name not in view_cache:
+            view_cache[name] = build(records)
+        return view_cache[name]
+
+    @app.get("/readyz")
+    def readiness(response: Response) -> dict[str, object]:
+        """Ready only when the snapshot is loaded and the evidence chain verifies."""
+        response.headers["Cache-Control"] = "no-store"
+        try:
+            # Not cached: freshness and coverage lag depend on the current time.
+            report = profile_data_quality(loaded, prediction_records())
+        except HTTPException as error:
+            raise _error(503, "NOT_READY", "evidence ledger failed verification") from error
+        if report.inference_blocked:
+            raise _error(503, "NOT_READY", "data-quality checks block inference")
+        return {"status": "ready", "datasetId": loaded.dataset_id}
+
+    @app.get("/api/prediction-catalog")
+    def prediction_catalog() -> PredictionCatalogView:
+        """Every race with its prediction mode and which checkpoints are supported."""
+        return cached_view("catalog", lambda records: build_catalog(loaded, records))
+
+    @app.get("/api/races/{race_id}/prediction")
+    def race_prediction(
+        race_id: str,
+        response: Response,
+        season: Annotated[int, Query(ge=1950, le=2100)],
+        checkpoint: Annotated[Checkpoint, Query()] = "pre-weekend",
+    ) -> PredictionEnvelope:
+        """Typed pre-race prediction envelope; refuses unsupported checkpoints."""
+        response.headers["Cache-Control"] = "no-cache"
+        resolve_race(race_id, season)
+        race = next(
+            r for r in loaded.races if r.race_id == race_id and r.season == season
+        )
+        try:
+            return build_envelope(loaded, prediction_records(), race, checkpoint)
+        except PredictionUnavailable as error:
+            status = 409 if error.code == "CHECKPOINT_UNSUPPORTED" else 404
+            raise _error(status, error.code, str(error)) from error
+
+    @app.get("/api/model-evaluation")
+    def model_evaluation() -> ModelEvaluationView:
+        """Winner hit rate, log loss and Brier score with bootstrap intervals."""
+        try:
+            return cached_view(
+                "evaluation", lambda records: evaluate_winners(loaded, records)
+            )
+        except PredictionUnavailable as error:
+            raise _error(404, error.code, str(error)) from error
+
+    @app.get("/api/data-quality")
+    def data_quality() -> DataQualityReport:
+        """Profile of the snapshot and stored predictions, with blocking flags."""
+        return profile_data_quality(loaded, prediction_records())
 
     @app.get("/api/models")
     def model_metadata() -> ModelsView:

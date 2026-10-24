@@ -1,12 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  LEGACY_STORAGE_KEYS,
   applyLockedRound,
-  browserStorage,
-  clearRecord,
   emptyRecord,
-  hydrate,
-  loadRecord,
-  saveRecord,
+  legacyStorage,
+  purgeLegacyStorage,
 } from "./pitwall";
 import type { CallScore, PitWallRecord, PredictionRecord, RoundScoreSummary } from "../types";
 
@@ -45,52 +43,6 @@ function scoredRound(playerTotal = 18): PitWallRecord["roundScores"][string] {
     ensemble: summary(11),
   };
 }
-
-describe("hydrate", () => {
-  it("returns an empty record for non-objects", () => {
-    expect(hydrate(null)).toEqual(emptyRecord());
-    expect(hydrate("garbage")).toEqual(emptyRecord());
-  });
-
-  it("keeps calls that have engine scores and drops orphaned ones", () => {
-    // A call without the engine's stored score cannot be displayed honestly.
-    const record = hydrate({
-      calls: {
-        "2024-01": { p1: "a", p2: "b", p3: "c" },
-        "2024-02": { p1: "a", p2: "b", p3: "c" },
-      },
-      roundScores: { "2024-01": scoredRound() },
-    });
-    expect(Object.keys(record.calls)).toEqual(["2024-01"]);
-    expect(Object.keys(record.roundScores)).toEqual(["2024-01"]);
-  });
-
-  it("drops a round atomically when one competitor's score block is malformed", () => {
-    const scores = scoredRound();
-    delete (scores as Record<string, unknown>)["m2-logit"];
-    const record = hydrate({
-      calls: { "2024-01": { p1: "a", p2: "b", p3: "c" } },
-      roundScores: { "2024-01": scores },
-    });
-    expect(record.calls).toEqual({});
-    expect(record.roundScores).toEqual({});
-  });
-
-  it("preserves the dataset digest binding on a stored call", () => {
-    const record = hydrate({
-      calls: { "2024-01": { p1: "a", p2: "b", p3: "c", datasetDigest: "deadbeef" } },
-      roundScores: { "2024-01": scoredRound() },
-    });
-    expect(record.calls["2024-01"]?.datasetDigest).toBe("deadbeef");
-  });
-
-  it("defaults missing counters and coerces wrong types", () => {
-    const record = hydrate({ streak: "three", evidenceViews: "many" });
-    expect(record.streak).toBe(0);
-    expect(record.evidenceViews).toBe(0);
-    expect(record.freshEyes).toBe(false);
-  });
-});
 
 describe("applyLockedRound", () => {
   const call = { p1: "1-max", p2: "44-ham", p3: "4-nor" };
@@ -170,40 +122,39 @@ describe("applyLockedRound", () => {
   });
 });
 
-describe("loadRecord / saveRecord / clearRecord", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
+describe("no persistent player data", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("removes exactly the legacy pit-wall key and leaves other origin storage alone", () => {
+    window.localStorage.setItem("pitwall.record.v1", JSON.stringify({ profileName: "KG", streak: 3 }));
+    window.localStorage.setItem("someone-elses-key", "keep me");
+    window.sessionStorage.setItem("pitwall.record.v1", "session copy is not ours to touch");
+
+    expect(purgeLegacyStorage(legacyStorage())).toEqual(["pitwall.record.v1"]);
+    expect(window.localStorage.getItem("pitwall.record.v1")).toBeNull();
+    expect(window.localStorage.getItem("someone-elses-key")).toBe("keep me");
+    expect(window.sessionStorage.getItem("pitwall.record.v1")).toBe("session copy is not ours to touch");
+    window.sessionStorage.clear();
   });
 
-  it("round-trips a record through localStorage", () => {
-    const storage = browserStorage();
-    const record: PitWallRecord = {
-      ...emptyRecord(),
-      profileName: "KG",
-      calls: { "2024-01": { p1: "a", p2: "b", p3: "c", datasetDigest: "deadbeef" } },
-      roundScores: { "2024-01": scoredRound() },
-      streak: 1,
-      bestStreak: 2,
-      evidenceViews: 2,
-      freshEyes: true,
-    };
-    saveRecord(storage, record);
-    expect(loadRecord(storage)).toEqual(record);
+  it("is a no-op when nothing legacy is stored or storage is unavailable", () => {
+    expect(purgeLegacyStorage(legacyStorage())).toEqual([]);
+    expect(purgeLegacyStorage(null)).toEqual([]);
   });
 
-  it("starts clean when nothing is stored", () => {
-    expect(loadRecord(browserStorage())).toEqual(emptyRecord());
+  it("tolerates storage that throws", () => {
+    const throwing = {
+      getItem: () => { throw new Error("blocked"); },
+      removeItem: () => { throw new Error("blocked"); },
+    } as unknown as Storage;
+    expect(purgeLegacyStorage(throwing)).toEqual([]);
   });
 
-  it("starts clean on corrupt JSON instead of crashing", () => {
-    window.localStorage.setItem("pitwall.record.v1", "{not json");
-    expect(loadRecord(browserStorage())).toEqual(emptyRecord());
+  it("knows only the one key earlier builds wrote", () => {
+    expect(LEGACY_STORAGE_KEYS).toEqual(["pitwall.record.v1"]);
   });
 
-  it("clears the stored record", () => {
-    const storage = browserStorage();
-    saveRecord(storage, { ...emptyRecord(), profileName: "KG" });
-    clearRecord(storage);
-    expect(loadRecord(storage)).toEqual(emptyRecord());
+  it("the empty record carries no identity fields", () => {
+    expect(Object.keys(emptyRecord())).not.toContain("profileName");
   });
 });
