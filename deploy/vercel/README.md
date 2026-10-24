@@ -81,3 +81,96 @@ For each promoted build retain the commit SHA, Vercel deployment ID/URL,
 container image identifier, smoke output, CI statuses and known licensing
 and calibration limitations. Deploy only a reviewed commit; roll back
 through Vercel to an earlier verified deployment if any contract fails.
+
+## Deployment incident / October 24, 2026
+
+The repository is not a standalone FastAPI project for Vercel's automatic
+FastAPI preset. Its deployable unit is the **one-image** `Dockerfile.vercel`
+(with React UI, engine routes, immutable model evidence, and SBOM).
+
+**Recorded incident:** Vercel projects `f1-prediction-engine-qriu` and
+`f1-prediction-engine-xcif` used `framework=fastapi` even though the
+repository has no Vercel-discoverable FastAPI entrypoint. Both repeatedly
+returned `FASTAPI_ENTRYPOINT_NOT_FOUND`, including on CodeQL-only
+Dependabot branch `fcfbb69`. That branch updated GitHub Actions metadata,
+not the runtime entrypoint. Creating `app.py` would conceal the
+misconfigured target and risk a partial service.
+
+**Target policy, reviewed October 24, 2026:**
+
+- `f1-pitwall-demo`: canonical integrated Container project.
+- `f1-prediction-engine-qriu` and `f1-prediction-engine-xcif`:
+  historical duplicates. Framework corrected to Container and Vercel's
+  Ignored Build Step configured to **skip all builds**. Preview generation
+  disabled. Retain their prior failed logs for incident evidence, but do
+  not redeploy/reanimate these duplicates as separate FastAPI apps.
+- Other pre-existing F1 preview projects may deploy successfully but
+  are not declared the authoritative complete game. Inventory them
+  before deleting or changing them; do not silently expand the
+  production-release surface.
+
+### Canonical Vercel project setting
+
+After `scripts/vercel-ignore-build.sh` is in the reviewed default branch,
+set **Project Settings → Git → Ignored Build Step** for
+`f1-pitwall-demo` to:
+
+```sh
+sh scripts/vercel-ignore-build.sh
+```
+
+Vercel's convention is counterintuitive: **exit 0 skips**, **exit 1 builds**.
+The rule skips `dependabot/*`, `renovate/*`, or a missing Git branch
+identity, while preserving reviewed feature-branch previews and main
+deployments. Dependabot changes still receive GitHub unit, TypeScript,
+security, and container checks. Merging approved changes to `main`
+triggers the canonical deployment as usual.
+
+Test the skip contract before changing any Vercel project:
+
+```bash
+python3 -m unittest discover -s scripts/tests -p test_vercel_ignore_build.py -v
+VERCEL_GIT_COMMIT_REF=dependabot/github_actions/example sh scripts/vercel-ignore-build.sh
+# expected exit code 0 => skip
+VERCEL_GIT_COMMIT_REF=main sh scripts/vercel-ignore-build.sh
+# expected exit code 1 => build
+```
+
+The lightweight gate runs inside existing GitHub PR Validation; it does
+not create a new scheduled job or poll for 15 minutes. The broader
+per-commit deployment reporting proposed in PR #66 is a separate
+observability feature and must avoid treating intentional skips as failures
+or duplicating heavy CI checks.
+
+### Release acceptance and prevention rules
+
+1. **One authoritative target:** maintain the `f1-pitwall-demo` project
+   ID, expected `framework=container`, and repository-root build in
+   a reviewed target inventory. Avoid creating new Vercel projects when
+   a connected canonical project already exists.
+2. **Validate settings before deploy:** confirm Git repo, target team,
+   configured framework, Dockerfile, ignore-build policy, and environment
+   with authenticated project inspection; a successful `docker build`
+   alone cannot validate Vercel project settings.
+3. **Code-only bot branches:** test dependency changes in GitHub without
+   spending Vercel build capacity on six related project connections.
+   Never let `github_actions/**` changes create new FastAPI deployments.
+4. **Separate CI and CD:** require scoped unit and integration results,
+   dependency audit, evidence/SBOM checks, and one-image smoke before
+   accepting a release. Production should remain the reviewed
+   `main` version; neither CI nor Vercel previews auto-promote releases.
+5. **Post-deploy evidence:** record deployment ID, exact source SHA,
+   immutable image/dataset/SBOM IDs, UI + API smoke, response privacy,
+   and actual edge TLS negotiation. Keep rollback instructions and a
+   working previous deployment.
+6. **Report drift, do not conceal:** if a project turns back to
+   `framework=fastapi` or starts publishing a partial frontend-only
+   copy, surface a deployment-configuration failure instead of adding
+   a dummy FastAPI entrypoint or waiving failed CI checks.
+
+**Verification limit:** correcting a project setting and skipping unwanted
+previews stops new failures; it does not change the historical status of
+previous ERROR deployments. A live preview can only be marked verified
+after Vercel returns READY and an authenticated external UI/API smoke
+succeeds. The canonical project's existing READY state is not proof of
+unrestricted public access or an operational live MQTT subscription.
